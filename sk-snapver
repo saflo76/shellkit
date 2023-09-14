@@ -1,0 +1,34 @@
+#!/bin/bash
+
+shopt -s nullglob
+export LC_ALL=C
+date=$(date +%y%m%d)
+
+while (( $# )); do
+   path=$(realpath -es -- "$1") && (
+      file=${path##*/}
+      dir=${path%/*}
+      snap=$file-$date
+      cd "$dir" || exit
+      entries=("$snap"*)
+      (( ${#entries[@]} )) && {
+         last="${entries[@]: -1}"
+         if (( ${#last} == ${#snap} )); then
+            snap+=a
+         else
+            p=$((${#last}-1))
+            i=$(printf %d "'${last:$p}")
+            if (( i < 97 || i > 121 )); then
+               snap="$last"a
+            else
+               let i++
+               snap=${last:0:-1}$(printf "\x$(printf %x $i)")
+            fi
+         fi
+      }
+      echo -n "$dir: "
+      cp -vai --reflink -- "$file" "$snap"
+   )
+   shift
+done
+

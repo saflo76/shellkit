@@ -1,0 +1,4 @@
+#!/bin/bash
+
+sk-hex "$@" | less
+

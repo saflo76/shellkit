@@ -1,0 +1,92 @@
+#!/bin/bash
+
+help () {
+cat >&2 <<EOF
+FRPO - File Recovery Priority Organizer
+bad to safe storage file recovery synchronization based on metadata lists
+
+Usage:  ${0##*/} [-hqv] SOURCE_BASE_DIR DEST_BASE_DIR METADATA_LIST [...]
+
+Options
+-h	print this help screen
+-q	quiet operation, print only errors
+-v	print file transfer progress and speed
+EOF
+exit
+}
+
+export LC_ALL=C TMPDIR=/dev/shm
+IFS=$'\n'
+verbose=-i
+[[ $1 = -* ]] && {
+   case "${1:1}" in
+      h) help ;;
+      q) verbose= ;;
+      v) verbose+=P ;;
+      *) echo "Unknown option '$1'"; exit ;;
+   esac
+   shift
+}
+(( $# < 3 )) && help
+
+source=$1
+dest=$2
+ddrescue_cmd () { ddrescue -pb4096 "$@" -- "$source/$f_name" "$r_path"-{img,map}; }
+
+for meta_l in "${@:3}"; do
+   let err_c=0
+   # Read relative path names and copy them one by one
+   while read -r f_name; do
+      r_path=$dest/$f_name.ddr
+      # Detect if have to continue a previous incomplete ddrescue recovery
+      if [[ -f $r_path-img ]]; then
+         ddr=2
+      else
+         # Rsync options:
+         # --append even if desirable is not used as from test results with damaged sources can fake
+         # complete file copy by padding with zeroes or garbage from read errors!
+         # --inplace is better than --partial alone as will overwrite previous copy (attempt), so at worst
+         # the resulting file size will be the same as before.
+         # In the end none of these options have been used as rsync tends to leave invalid copies as valid
+         rsync -Rt $verbose "$source/./$f_name" "$dest"
+         err=$?
+         # Check if rsync fails
+         if (( err )); then
+            # Detect rsync break signal by user and exit after printing stats
+            (( err == 20 )) && exit
+            # Any other error is considered rsync failing, so enable ddrescue mode for this file
+            ddr=1
+            let err_c++
+         else
+            continue
+         fi
+      fi
+      # If here, ddrescue method kicks in, this creates and maintains a map file for each file to
+      # to perform a smart stepwise recovery (can be interrupted/continued anytime), until completion
+      (( ddr == 1 )) && {
+         # As first recovery attempt use a trivial setting to fastly get easily readable parts
+         ddrescue_cmd -n
+         # If ddrescue recovery hasn't finished all parts set for serious mode (ddr=2)
+         ddrescuelog -D "$r_path"-map && ddr=0 || ddr=2
+      }
+      (( ddr == 2 )) && {
+         # 2nd pass uses the tipical and (time) demanding ddrescue setup to recover troublesome areas
+         ddrescue_cmd -dr3
+         ddrescuelog -D "$r_path"-map && ddr=0
+      }
+      if (( ddr )); then
+         let err_c++
+      else
+         mv -- "$r_path"-img "$dest/$f_name"
+         touch -r {"$source","$dest"}/"$f_name"
+         rm -- "$r_path"-map
+      fi
+   done < <(cut -f3 "$meta_l")
+
+   echo -e "\n'$meta_l' done, errors count: $err_c"
+   (( err_c )) && {
+      echo 'Waiting 5sec before proceeding with next list (press CTRL-C if you want to break)'
+      sleep 5 || exit
+   }
+done
+

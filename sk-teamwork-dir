@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Setup folder(s)/file(s) ownership and permissions for tipical team work
+# Usage:  command [USER][:][GROUP] [DIR_OR_FILE] [...]
+
+export TMPDIR=/dev/shm LC_ALL=C
+error () { printf %s\\n "${0##*/}: Error, $@"; exit 1; }
+
+u=${1%%:*}
+[[ -n $u ]] && ! id -u "$u" &>/dev/null && error "unknown user '$u'"
+# if user name and arg matches there is no colon for sure
+(( ${#u} == ${#1} )) || {
+   g=${1##*:}
+   [[ -n $g ]] && ! grep -q "^$g:" /etc/group && error "unknown group '$g'"
+}
+
+find "${@:2}" \( -type f -exec chmod +664,+X,-2 '{}' + -o -type d -exec chmod =2775 '{}' + \) \
+   -exec chown "$1" '{}' +
+

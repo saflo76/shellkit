@@ -1,0 +1,117 @@
+#!/bin/bash
+
+# MUST pass arguments separated by newline, call this function with IFS=$'\n'
+# Syntax:
+#   sk-args-to-vars OPT_SPEC1 [OPT_SPECn] -- ARGUMENTS
+
+# OPT_SPEC
+#   format:  char{1+}[.char{1+}][...][=] [...]
+#   syntax:  VAR_OPT1[.OPT2][.OPTn][=] [...]
+
+# 1st OPT_SPEC field resolves variable name, if it's 1 char gets wrapped around by underscores
+# "=" will trigger PARAMETER parsing (VAL=$2) rather than FLAG (VAL++)
+
+# par.p.parameter=	seeks for PARAMETERS --par -p --parameter and assigns the variable "par"
+# f.flag		seeks for FLAGS -f --flag and sets +1 to variable "_f_"
+
+# Typical use:
+#   func ()
+#   {
+#      sk-args-to-vars dry-run.n debug.v.verbose h.hours= days.d= months.m= whole-file.W -- "$@"
+#      shift $parsed_argc
+#   {
+#   func --dry-run -vvvW --hours 8 -d7 --months=36 [arguments] [...]
+
+# Seeks:	Assigns:
+#   --dry-run	  dry_run++
+#   -v -v -v	  debug+=3
+#   -W		  whole_file++
+#   --hours	  _h_=8
+#   -d		  days=7
+#   --months	  months=36
+
+# 1-char variables avoids cross assignment with caller options
+unset i j c l r
+o=' '
+cmd_name=${0##*/}
+
+# Gather supported options list, guess variables names, empty variables when not forbidden (+)
+until [[ $1 = -- ]]; do
+   case $1 in
+      '') echo "Error ($cmd_name): Missing parsing line delimiter '--'" >&2; set --; break ;;
+      -*) echo "Error ($cmd_name): Unknown option '$1'" >&2; set --; break ;;
+      *)
+         i=${1%%[.=]*}
+         if (( ${#i} > 1 )); then
+            i=${i//-/_}
+         else
+            i=_"$i"_
+         fi
+         o+="$i.$1 "
+      ;;
+   esac
+   shift
+done
+shift
+
+# Parse arguments: increment FLAGS and assign PARAMETERS
+# on 1st extraneous option, isolated argument or -- set parsed args number to "parsed_argc" and exit
+declare -i parsed_argc=$#
+while (( $# )); do
+   case $1 in
+      -[^-]*)
+         for (( i=1; i < ${#1}; i++ )); do
+            c=${1:$i:1}
+            l=${o%.$c[.= ]*}
+            # tricky way to seek in the options template "o" the right one without external tools
+            if [[ $l != $o ]]; then
+               r=${o#$l}
+               j=${l##* }${r%% *}
+               # option type: PARAMETER or FLAG ?
+               if [[ ${j: -1} = = ]]; then
+                  # assignment and value joint in same argument?
+                  if (( $i < ${#1}-1 )); then
+                     eval ${j%%.*}='${1:$i+1}'
+                  else
+                     eval ${j%%.*}='$2'
+                     shift
+                  fi
+                  break
+               else
+                  let ${j%%.*}++
+               fi
+            else
+               break 2
+            fi
+         done ;;
+      --) shift; break ;;
+      --[^-]*)
+         i=${1:2}
+         # if "=" doesn't match "c" and "i" will be equal
+         c=${i%%=*}
+         l=${o%.$c[.= ]*}
+         if [[ $l != $o ]]; then
+            r=${o#$l}
+            j=${l##* }${r%% *}
+            # option type: PARAMETER or FLAG ?
+            if [[ ${j: -1} = = ]]; then
+               if [[ $c != $i ]]; then
+                  eval ${j%%.*}='${i#$c=}'
+               else
+                  eval ${j%%.*}=
+               fi
+            else
+               let ${j%%.*}++
+            fi
+         else
+            break
+         fi
+      ;;
+      *) break ;;
+   esac
+   shift
+done
+let parsed_argc-=$#
+
+unset i j c l r o
+

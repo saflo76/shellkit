@@ -1,0 +1,56 @@
+#!/bin/bash
+
+(( $# < 2 )) || [[ $1 == -h ]] && {
+cat >&2 <<EOF
+FRPO - File Recovery Priority Organizer
+purge metadata list from fully synched files
+
+Usage:  ${0##*/} SYNC_DIR METADATA_LIST [...]
+EOF
+exit
+}
+
+export LC_ALL=C TMPDIR=/dev/shm
+disk_l=$(mktemp)
+tmp1=$(mktemp)
+tmp2=$(mktemp)
+tmp3=$(mktemp)
+trap 'rm -f -- $disk_l "$tmp"{1..3}' EXIT
+
+(cd "$1" && find -type f -printf "%P\t%s\n") | sort -o $disk_l
+[[ -s $disk_l ]] || {
+   echo 'Error: sync folder empty or incorrect parameters'
+   exit
+}
+
+for meta_l in "${@:2}"; do
+   # Get file name and size, paste in inverted field position, add a leading index number (+p) with
+   # \a (bell) char further used as separator to group file name and size, sort by file name
+   # (index is adopted to sit remaining metadata lines at their original order at the end)
+   paste <(cut -f3 "$meta_l") <(cut -f2 "$meta_l") | nl -w1 -sp$'\a' | sort -t$'\a' -k2 -o $tmp1
+   # Getting index list of metadata to purge (if any), as referencing fully synched files
+   join --nocheck-order -t$'\a' -12 -o 1.1 $tmp1 $disk_l | sort -o $tmp2
+   [[ -s $tmp2 ]] && {
+      echo -n "List '$meta_l': "
+      cut -d$'\a' -f1 $tmp1 | sort -o $tmp3
+      # Getting index list of incomplete/missing files by comparing full list with purge list
+      comm --check-order -13 $tmp{2,3} > $tmp1
+      if (( $(stat -c %s $tmp1) )); then
+         sed -nf $tmp2 "$meta_l" >> "$meta_l".done
+         sed -nf $tmp1 "$meta_l" > $tmp3
+         mv $tmp3 "$meta_l"
+         msg=
+      else
+         if [[ -s $meta_l.done ]]; then
+            cat "$meta_l" >> "$meta_l".done
+            rm -- "$meta_l"
+         else
+            mv "$meta_l"{,.done}
+         fi
+         msg=' (completed)'
+      fi
+      i=$(wc -l $tmp2)
+      echo "${i%%[^0-9]*} references purged$msg"
+   }
+done
+

@@ -1,0 +1,130 @@
+#!/bin/bash
+
+# SK-PRUNE-DATES
+# Gets a new-line based dates list (even with other text pre/suffixed) from stdin, filters using an
+# exponential/linear time retention pattern and outputs a subset meant to be pruned (default) or keep.
+# The most recent date found is treaten as base reference.
+
+# There are 4 (f)iltering modes, the one kicks in depends by given parameters
+
+# The pattern simply defines (splits) a number of "keep-1" pruning zones inside the given time window
+# (time=SEC), which bounds are set:
+# (f1) for any "exp>1" by a power expression (i^exp) in a growing progression going back in timeline
+# (f2) for "exp=1" equally distributed
+# For each zone only the oldest date within the bounds is keep.
+
+# Cutoff modes (no zones):
+# (f3) if no "time" window is given than the last "keep" dates are keep
+# (f4) if no "keep" number is given than any date inside "time" window is keep
+
+# For (f1) it's strongly advised to use "sk-prune-dates-tuner" to easily test and spot the preferred
+# pattern parameters
+
+
+# The date format to be parsed inside strings must have 10 digits and match pattern:
+# ^.*YYYY?MM?DD?hh?mm.*$
+# where ? represents one non-digit character or none
+# any free non-misleading sequence (.*) is accepted before or after date
+
+# For best readability, compactness and management the string format "my-title-YYYYMMDD-HHMM"
+# could be a good compromise.
+# Just some other working examples:
+#   my-title.1999-12-31.23-59
+#   my-backup-sda3-19991231-23-59
+#   19991231-2359-my-title
+
+# As this is intended to be used inside scripts in a function-like fashion, parameters are directly
+# provided by variable assignment at command execution (avoids parsing bloat)
+# Example:
+#   time=6m keep=10 exp=2 sk-prune-dates < snapshots.list > prune.list
+
+# Variables:
+#   time=SEC	time window in seconds (use "sk-time-to-sec" to easily convert from human notation)
+#   keep=NUM	enable exponential time retention pattern, specify number of dates to pick
+#   exp=(N>0)	exponent, controls how zone bounds increases going back in timeline
+#		realistic values are between 1 to 5 (default=3), 1 provides an equal distribution
+#   k=1		output keep list (warning!) as opposite to default to output prune list
+#   filter=STR	use alternative regex (extended) string for file-name date parsing
+
+export TMPDIR=/dev/shm LC_ALL=C
+IFS=$'\n'
+dates_list=($(sort))
+declare -i last=${#dates_list[@]} i=0 j time keep exp
+(( last )) || exit
+: ${keep=0} ${time=0}
+
+if (( time > 0 )); then
+   trap 'rm -f -- $file' EXIT
+   file=$(mktemp)
+   # Exponential time line retention pattern
+   : ${exp=3}
+   # date parsing so that output will be 'YYYYDDMM hhmm'
+   : ${filter='s/^.*([0-9]{4})[^0-9]?([01][0-9])[^0-9]?([0-3][0-9])[^0-9]?([0-2][0-9])[^0-9]?([0-5][0-9]).*$/\1\2\3 \4\5/'}
+   # Get dates from stdin and convert in microseconds (for accuracy in e^E fractions)
+   sed -r "$filter" <<< "${dates_list[*]}" > $file
+   declare -i time=time*1000000 split linear=$(( exp == 1 )) times_list=($(date -f $file +%s000000))
+   let last--
+   
+   if (( k )); then
+      # List dates to KEEP
+      if (( keep > 1 )); then
+         # In linear mode (-E1) split multiplier range is [1 .. keep-1], with exponential is [2 .. keep]
+         # +1 avoids a rounding down issue that would cut dates still inside limit set, this specially
+         # arises in linear mode with nicely aligned patterns for ex.: keep=31 time=30d
+         split=$((time/(keep-linear)**exp+1))
+         while :; do
+            # Scan and pick first (oldest) date inside current zone
+            while j=times_list[last]-times_list[i] && (( j > time )); do let i++; done
+            (( i >= last )) && break
+            printf %s\\n "${dates_list[$i]}"
+            let i++
+            # Scan for the next zone (keep) outside picked date (j), to limit picking one date per zone
+            while (( j <= time )); do
+               let keep--
+               (( keep < 2 )) && break 2
+               time=$((split*(keep-linear)**exp))
+            done
+         done
+      elif (( keep < 1 )); then
+         # When "keep" is not meaningful or not set, just apply a cutoff after "time" limit
+         time=times_list[last]-time
+         for (( last=0; times_list[last] < time; last++ )); do :; done
+      fi
+      printf %s\\n "${dates_list[@]:$last}"
+   else
+      # List dates to PRUNE
+      if (( keep > 1 )); then
+         split=$((time/(keep-linear)**exp+1))
+         while :; do
+            while j=times_list[last]-times_list[i] && (( j > time )); do
+               printf %s\\n "${dates_list[$i]}"
+               let i++
+            done
+            (( i >= last )) && break
+            let i++
+            while (( j <= time )); do
+               let keep--
+               (( keep < 2 )) && break 2
+               time=$((split*(keep-linear)**exp))
+            done
+         done
+         let last-=i
+      elif (( keep < 1 )); then
+         # When "keep" is not meaningful or not set, just apply a cutoff after "time" limit
+         time=times_list[last]-time
+         for (( last=0; times_list[last] < time; last++ )); do :; done
+      fi
+      # Avoid printing empty line
+      (( last )) && printf %s\\n "${dates_list[@]:$i:$last}"
+   fi
+else
+   # When "time" is not meaningful or not set, just apply a cutoff after "keep" number limit
+   (( keep > last )) && keep=last
+   if (( k )); then
+      (( keep )) && printf %s\\n "${dates_list[@]: -$keep}"
+   else
+      let last-=keep
+      (( last )) && printf %s\\n "${dates_list[@]:0:$last}"
+   fi
+fi
+

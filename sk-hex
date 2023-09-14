@@ -1,0 +1,5 @@
+#!/bin/bash
+
+let x=$(tput cols)-11
+xxd -c $((x/7*2+(x%7>3))) "$@"
+

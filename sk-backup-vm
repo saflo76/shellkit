@@ -1,0 +1,67 @@
+#!/bin/bash
+
+cmd_name=${0##*/}
+(( $# < 2 )) && {
+cat <<EOF
+$cmd_name -- borg backup wrapper for smart virtual machine backup
+
+Usage:  $cmd_name [borg-create-options] /BORG_REPO::ARCHIVE IMAGE_FILE
+EOF
+exit
+}
+error_exit () {
+   printf %s\\n "$cmd_name: Error, $@"
+   exit 1
+}
+(( $(id -u) )) && error_exit "must be root"
+
+shopt -s nullglob
+img=$(readlink -ne "${@: -1}") && bdev=$(losetup -frP --show "$img") || error_exit "invalid image file"
+# Optimal default options: "-vsC zstd"
+borg_cmd=(borg create --read-special "${@:1:$#-1}")
+
+export TMPDIR=/dev/shm LC_ALL=C
+tmp=$(mktemp -d) || exit
+trap '
+   pkill -P $$
+   [[ -n $tmp ]] && { cd ..; rm -- $tmp/*; rmdir -- $tmp; }
+   [[ -n $bdev ]] && losetup -d $bdev
+' EXIT
+cd $tmp || exit
+
+# Passing image file instead of loop-dev as sfdisk dumps source reference
+sfdisk -d "$img" > dump.sfdisk
+pttype=$(blkid -o value -s PTTYPE $bdev)
+if [[ $pttype =~ ^(dos|gpt)$ ]]; then
+   head -c512 $bdev > mbr
+else
+   pttype=
+fi
+
+plist=($bdev?*)
+if [[ -n $plist ]]; then
+   for part in ${plist[@]}; do
+      # Using "blkid" as "lsblk" shows a (no output) bug when closely invoked 2 times
+      fs=$(blkid -o value -s TYPE $part)
+      case $fs in
+         vfat)
+            a=$(file -bs $part | sed 's/.*FAT (\([0-9]\{2\}\) bit).*/\1/')
+            [[ $a =~ ^(12|16|32|64)$ ]] && fs=fat$a
+         ;&
+         exfat) read_cmd=(partclone.$fs -qcs $part) ;;
+         ntfs) read_cmd=(ntfsclone -qso - $part) ;;
+         ?*) fs+=. ;&
+         *) fs+=raw; read_cmd=(cat $part) ;;
+      esac
+      pfile=${part:${#bdev}}.$fs
+      # Named pipes do the trick to serve backup input from stream sources
+      mkfifo -m0600 $pfile
+      ${read_cmd[@]} > $pfile &
+   done
+elif [[ -z $pttype ]]; then
+   # Get the whole image only when no partitions are detected and with uncommon layouts
+   mkfifo -m0600 image.raw
+   cat $bdev > image.raw &
+fi
+"${borg_cmd[@]}" *
+

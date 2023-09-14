@@ -1,0 +1,52 @@
+#!/bin/bash
+
+[[ $1 == -h ]] && {
+cat >&2 <<EOF
+FRPO - File Recovery Priority Organizer
+metadata file list splitter and organizer
+
+Usage:  ${0##*/} [METADATA_LIST] [...]
+EOF
+exit
+}
+
+export LC_ALL=C TMPDIR=/dev/shm
+list=$(mktemp)
+tmp=$(mktemp)
+
+# Usage: grep_ext EXT_FILTER [GREP_OPT] [LIST]
+grep_ext () { grep -Eie '\.('"$1"')$' "${@:2}"; }
+
+# Usage: split_list EXT_FILTER MAIN_LIST NEW_SPECIFIC_LIST
+split_list () {
+   grep_ext "$1" "$2" > $tmp && {
+      mv $tmp "$3"
+      # Each splitting pass will also symmetrically cut the main list
+      grep_ext "$1" -v "$2" > $tmp
+      mv $tmp "$2"
+   }
+}
+
+# File extension regex filters, from statistically most important ones (line-wise) to least ones
+documents='accdb|cert?|crt|css|csv|doc[mx]?|dotx?|eml|epub|html?|js|mdb|mdf|od[fgpst]|p7m|pages|pdf|ppsx?|ppt[mx]?|ps|pst|rtf|tex|txt|url|vsdx?|xls[mx]?|wk4|wks|wpd|xps'
+graphics='3ds|ai|cdr|dw[fgt]|dxf|emf|eps|ps[bdfp]|pubx?|svg|swf|wmf|xcf'
+images='aae|apng|arw|avif|bmp|cr2|crw|dcm|dcr|dng|gif|ico|jpe?g|mrw|nef|nrw|orf|png|raw|sr2|tga|tiff?|wdp|webp'
+archives='7z|ace|apk|arc|arj|bz2|cab|deb|lz[4ho]|rar|rpm|tar|t?gz|t?xz|zip|zstd?'
+audio='3ga|aac|ac3|aiff?|amr|ape|au|cda|dts|flac|m2a|m3u|m4a|mka|midi?|mp[23ac]|ogg|opus|shn|tta|wav|wma|wv'
+video='3g2|3gp|asf|avi|bup|ifo|flv|m2ts?|mts|mkv|mov|mp4|mpe?g|ogm|ogv|srt|sub|ts|vob|webm|wmv'
+system='bat|chm|cmd|com|cpl|dll|elf|exe|hlp|inf|ini|jar|log|ms[iptu]|ocx|ps1|reg|sys|vbs'
+diskimg='bin|cue|dmg|hdd|img|iso|md[fsx]|nrg|ov[af]|qcow2?|qed|vbox|vdi|vhdx?|vmdk|vmxf?|wim'
+
+cat -- "$@" > $list
+split_list "$documents" $list 10documents
+split_list "$graphics"  $list 20graphics
+split_list "$images"    $list 30images
+split_list "$archives"  $list 40archives
+split_list "$audio"     $list 50audio
+split_list "$video"     $list 60video
+split_list "$system"    $list 70system
+split_list "$diskimg"   $list 80diskimg
+touch $list
+# Uncategorized stuff left
+mv $list 90stuff
+

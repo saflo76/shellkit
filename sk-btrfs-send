@@ -1,0 +1,438 @@
+#!/bin/bash
+
+# Per volume directory and snapshot layout model: "which-when,paired-with" naming convention
+
+# HOST1
+# /top_subvol/
+#   @root
+#   @home
+#   @documents
+#   ...
+#   local/   Directory for local file system snapshots and remote send
+#     @documents-20170105-1705,host2   Naming convention: @SUBVOL-DATE-TIME,REMOTE_HOST_TAG
+#     @documents-20170106-1530	       Simple local volume snapshot
+#     @home------20170105-2200,host2   Local to host snapshot match for delta send/receive
+#     @system----20170105-2200,host2
+#   remote/   Directory as remote host/snapshots collection point
+#     host2/
+#       ...
+#     host3/
+#       ...
+
+# HOST2
+# /top_subvol/
+#   @root
+#   @home
+#   @documents
+#   ...
+#   local/
+#     ...
+#   remote/
+#     host1/
+#       @documents-20170102-1600
+#       @documents-20170103-1601
+#       @documents-20170104-1600
+#       @documents-20170105-1705
+#       @home------20170104-2200
+#       @home------20170105-2200
+#       @system----20170104-2201
+#       @system----20170105-2200
+#     host3/
+#       ...
+
+
+# --- Methodical choices, internal logic and best practices
+
+# Every subvolume inside one HOST should have an unique name hostwise regardless the file system
+# to which it belongs.
+# This basic guidance simplifies management when storing snapshots in common stacking points, enabling
+# an immediate global identification and avoiding overuse of dirs (to avoid conflicting names)
+
+# Each file system can have either a "/local" or "/remote" directory or both, in this layout
+# convention /local is intended to collect snapshots locally (instantly) created while /remote
+# collects any imported snapshot, that is from other localhost devices or from remote hosts.
+# Since /remote can be easily used as a "multiple sources backup point" it's recommended to be
+# organized with a sub-dir for each external source
+
+# On local side a tag is appended to each snapshot name (,RECV_TAG) right before sending, after the
+# send job ends successfully the current one gets promoted as new parent while the previous drops the
+# tag. This is crucial for 2 reasons:
+# 1° After the very 1st send job of a snapshot queue the subsequent ones CAN and MUST be ALWAYS done
+# incrementally to get the HUGE space savings (and speeds) guaranteed by a COW (copy-on-write) based
+# file system, so the tag can advert when a snapshot is essential (for future incremental send) and
+# block any (aware) tool from manipulating it.
+# 2° The tag by its naming convention (host|device) adverts the remote destination(s) to which it is
+# paired so the user can spot in any moment what's going on
+
+
+# --- Snapshots relationship resolution
+
+# So those local snapshots exported that consist in the most updated copy will have their name with
+# a ID tag appended, reporting the remote hostname or block device label in case the send/receive is
+# done within partitions of the same host, --tag= parameter can override it.
+
+# This "tagged items in one dir" approach is chosen over the "specific dir per destination"
+# because having one unique sortable and human readable pool listing both local snapshots
+# and remotely sent ones gives an immediate global and finite picture of timeline availability,
+# as jobs of same subvolumes sent in different moments at random destinations tends to sum up in more
+# intermediate timestamps.
+# This is useful and promptly exploited when sending jobs to sporadic destinations,
+# where a big empty time window since last backup could be settled again with sending a selected
+# sequence also enriched by those intermediate snapshots:
+# a per-subvolume local-remote list is merged, pruned and used to send missing snapshots and in
+# the end pruning those out of time retention pattern.
+
+
+cmd_name=${0##*/}
+(( $# )) || {
+cat <<EOF
+Snapshot creation, pruning, sending and syncing tool for BTRFS file system,
+simplifies command-line and scheduled management.  Written by Sandro Floridia
+
+Syntax:  $cmd_name [options] [REMOTE_HOST:/]REMOTE_DIR SUBVOLUME [...]
+
+-t --time=NUM[ymwdhM]	Valid time window for keeping snapshots, but enforced
+			only when their number exceeds the maximum
+-n --keep=NUM		Maximum number of snapshots to keep and rotate
+-E --exp=NUM		Exponent: pruning algorithm uses a power based pattern,
+			high values leads to a fast growing spread between
+			recent and earlier dates. 1 gives an even distribution,
+			realistic values are between 1 and 5, default is 3
+-l --local=DIR		Read snapshots from one common directory, without this
+			option each lot is read under the respective subvolume
+			directory
+--tag=RECV_ID		Before a snapshot is sent on remote side, an ID tag is
+			appended to its name (,TAG), on the next successful send
+			the tag is removed. So the latest snapshot sent always
+			adverts this tag to forbid (aware) tools from pruning it
+			and points to which remote host/device is matched.
+			This option sets the tag manually
+--self (BETA,don't use)	Enable full autonomous mode: normally this tool doesn't
+			create any (new) snapshot nor perform any pruning on
+			local side, it just updates as possible the remote side
+			following the given pattern. In self mode a new snapshot
+			is made locally and after syncing to remote the pruning
+			pattern is also applied	locally
+-p --port=NUM		Use different port for SSH login
+
+Example:  $cmd_name --time=1m2w --keep=8 backup-srv:/vol/remote/my-pc @root @home
+EOF
+exit
+}
+
+shopt -s nullglob
+IFS=$'\n'
+put_log_str () { echo -e $(date +%y%m%d\ %H%M:%S)" - $cmd_name - $@"; }
+# Mask intentionally done with globbing to be fast and avoid special chars conflicts of regex
+date_mask="-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]"
+date_mask_len=14
+
+(( $(id -u) )) && {
+   put_log_str "Error: must be root"
+   exit 1
+}
+
+declare -i i j keep exp=3 self
+
+(( func )) || {
+   . sk-args-to-vars time.t= keep.n= exp.E= local.l= recv-tag.tag= self port.p= -- "$@"
+   shift $parsed_argc
+}
+(( $# < 2 )) && {
+   put_log_str "Error: not enough arguments"
+   exit 1
+}
+
+
+# RECEIVE side initialization
+
+if [[ $1 = *:/* ]]; then
+   # NETWORK receive [recv_addr:/]directory argument
+   recv_addr="${1%%:/*}"
+   a=$(sha1sum <<< "root@$recv_addr:$port")
+   ssh_socket=/dev/shm/${a%% *}
+   # Multiplexed roaming SSH setup for fast response
+   ssh_cmd=(ssh ${port+-p$port} -o ControlMaster=auto -o ControlPersist=20 -S $ssh_socket $recv_addr)
+   
+   put_log_str "CONNECTING to '$1'..."
+   a=/${1#*:/}
+   recv_dir=$(${ssh_cmd[@]} "readlink -ne \"$a\" && [[ -d \"$a\" ]]") || {
+      put_log_str "Error: can't use '$a' as receive directory"
+      exit 1
+   }
+   # lock for file system race condition
+   recv_dir_lock_tag=${recv_dir//[ \/]/_}
+
+   recv_host=$(${ssh_cmd[@]} "printf %s \$HOSTNAME")
+   [[ -z $recv_tag ]] && recv_tag=$recv_host
+   put_log_str "Host '$recv_host' CONNECTED"
+
+   # lock for block device heavy load
+   a=$(${ssh_cmd[@]} "findmnt -nvo source -T \"$recv_dir\"")
+   a=${a#/dev/}
+   a=${a//\//_}
+   recv_bdev=${a%[0-9]*}
+   
+   coproc ssh_proc { ${ssh_cmd[@]} \
+      "# 1st part
+      cd \"$recv_dir\" || { echo failed; exit 1; }
+      exec {recv_dir_lock}> /run/lock/fs_dir\"$recv_dir_lock_tag\"
+      flock \$recv_dir_lock
+      exec {recv_bdev_lock}> /run/lock/io_stress_bdev_\"$recv_bdev\"
+      flock \$recv_bdev_lock
+      echo ready
+      
+      # 2nd part
+      read done_msg
+      exec {recv_bdev_lock}>&- {recv_dir_lock}>&-"
+   }
+   # Coprocess sync: wait ready message to continue only when 1st part is done
+   read ready_msg <&${ssh_proc[0]}
+   
+   # Delete unfinished snapshots on remote side, easily spotted because of the receiver(s) tag
+   ${ssh_cmd[@]} \
+     "cd \"$recv_dir\" || exit
+      shopt -s nullglob
+      a=(*$date_mask,*)
+      [[ -n \$a ]] && {
+         echo 'Cleaning from interrupted transfers...'
+         btrfs subvolume delete \"\${a[@]}\"
+         echo
+      }"
+   echo
+else
+   # BLOCK DEVICE receive directory argument
+   { recv_dir=$(readlink -ne "$1") && [[ -d $1 ]]; } || {
+      put_log_str "Error: can't use '$1' as receive directory"
+      exit 1
+   }
+   # lock for file system race condition
+   exec {recv_dir_lock}> /run/lock/fs_dir${recv_dir//[ \/]/_}
+   flock $recv_dir_lock
+
+   # lock for block device heavy load
+   a=$(findmnt -nvo source -T "$recv_dir")
+   [[ -z $recv_tag ]] && {
+      # If no custom remote tag get it from device label
+      recv_tag=$(lsblk -no label "$a")
+      # If device label is empty fallback to device name
+      [[ -z $recv_tag ]] && recv_tag=${a:2}
+   }
+   a=${a#/dev/}
+   a=${a//\//_}
+   recv_bdev=${a%[0-9]*}
+   exec {recv_bdev_lock}> /run/lock/io_stress_bdev_$recv_bdev
+   flock $recv_bdev_lock
+
+   # Delete unfinished snapshots on remote side, easily spotted because of the receiver(s) tag
+   ( cd "$recv_dir" && a=(*$date_mask,*) && [[ -n $a ]] && {
+      echo 'Cleaning from interrupted transfers...'
+      btrfs subvolume delete "${a[@]}"
+      echo
+   } )
+fi
+shift
+[[ -z $recv_tag ]] && { put_log_str "Error: couldn't get any ID tag for receiver"; exit 1; }
+
+
+# SEND side initialization
+
+lock_send () {
+   # lock for file system race condition
+   a=${send_dir//[ \/]/_}
+   exec {send_dir_lock}> /run/lock/fs_dir$a
+   flock $send_dir_lock
+
+   # lock for block device heavy load
+   a=$(findmnt -nvo source -T "$send_dir")
+   a=${a#/dev/}
+   a=${a//\//_}
+   send_bdev=${a%[0-9]*}
+
+   # If same host and block device for send/recv just rely on recv lock for heavy load (deadlock!)
+   [[ -z $recv_addr && $send_bdev = $recv_bdev ]] || {
+      exec {send_bdev_lock}> /run/lock/io_stress_bdev_$send_bdev
+      flock $send_bdev_lock
+   }
+}
+
+unlock_send () {
+   # These checks are almost always needed, so let's embed them in the function
+   [[ -n $send_dir_lock ]] && {
+      [[ -n $send_bdev_lock ]] && {
+         exec {send_bdev_lock}>&-
+         unset send_bdev_lock
+      }
+      exec {send_dir_lock}>&-
+      unset send_dir_lock
+   }
+}
+
+[[ -n $local ]] && {
+   if send_dir=$(readlink -ne "$local") && [[ -d $send_dir ]]; then
+      # One common send dir for local snapshots just need a lock for all at start
+      lock_send
+   else
+      put_log_str "Error: can't use '$local' as common local directory"
+      exit 1
+   fi
+}
+time=$(sk-time-to-sec $time)
+
+remove_tag () {
+   local a b
+   while (( $# )); do
+      a=${1:0:$snap_strlen}
+      case "$1" in
+         "$a"*,"$recv_tag") mv "$1" "${1%,$recv_tag}" ;;
+         "$a"*,"$recv_tag",*)
+            a=${1%,"$recv_tag",*}
+            b=${1#"$a,$recv_tag"}
+            mv "$1" "$a$b"
+         ;;
+      esac
+      shift
+   done
+}
+
+# MAIN loop
+
+while (( $# )); do
+   # Collect snapshots in one common dir (local) or under their respective dir ?
+   if [[ -n $local ]]; then
+      if (( self )); then
+         # Self mode does fresh new snapshots and needs source subvolume path, not just a filter name
+         subvol_path=$(readlink -ne "$1")
+         subvol=${subvol_path##*/}
+      else
+         subvol=${1##*/}
+      fi
+   else
+      if (( self )); then
+         # Self mode does fresh new snapshots and needs source subvolume path, not just a filter name
+         subvol_path=$(readlink -ne "$1")
+         subvol=${subvol_path##*/}
+         send_dir=${subvol_path%/*}
+      else
+         subvol=${1##*/}
+         send_dir=$(readlink -ne "${1%/*}")
+      fi
+      # If send dir hasn't changed don't uselessly setup the lock again (losing exclusive access)
+      [[ -n $send_dir && $send_dir != $last_send_dir ]] && {
+         unlock_send
+         lock_send
+         last_send_dir=$send_dir
+      }
+   fi
+
+   # Working dir must be restored at end of this block to canonicalize paths specified in args
+   if [[ -n $subvol ]] && pushd "$send_dir" >/dev/null; then
+      echo "PROCESSING subvolume '$subvol'"
+      snap_strlen=$((${#subvol}+$date_mask_len))
+      
+      # Get (older) snapshots list chain from remote side
+      if [[ -n $recv_addr ]]; then
+         recv_snaps=($(${ssh_cmd[@]} \
+            "shopt -s nullglob; cd \"$recv_dir\" && printf %s\\\n \"$subvol\"$date_mask")) || exit
+      else
+         recv_snaps=($(cd "$recv_dir" && printf %s\\n "$subvol"$date_mask)) || exit
+      fi
+      # Get (newer) local side snapshots list chain without remote tag info for effective comparisons
+      send_snaps=($(printf %s\\n "$subvol"$date_mask* | cut -c-$snap_strlen | uniq))
+
+      (( self )) && {
+         a=$subvol-$(date +%Y%m%d-%H%M)
+         # Is there already a snapshot with same date ? (dots escaping for basic regex)
+         grep -- "^${a//./\\.}$" <<< "${recv_snaps[*]}"$'\n'"${send_snaps[*]}" || {
+            btrfs subvolume snapshot -r "$subvol_path" "$a" && send_snaps+=("$a")
+         }
+      }
+
+      # Find the parent snapshot to start with, that is the most recent common to both sides
+      parent_snap=$(sort <<< "${recv_snaps[*]}"$'\n'"${send_snaps[*]}" | uniq -d | tail -1)
+      i=0
+      [[ -n $parent_snap ]] && {
+         echo "Starting from PARENT '$parent_snap'"
+         # Find index where parent starts in local side while removing possibly forgotten tag
+         for (( ; i < ${#send_snaps[@]}; i++ )); do
+            [[ "${send_snaps[$i]}" = $parent_snap ]] && { let i++; break; }
+            remove_tag "${send_snaps[$i]}"*
+         done
+      }
+      keep_snaps=($(sort -u <<< "${recv_snaps[*]}"$'\n'"${send_snaps[*]:$i}" | \
+         time=$time keep=$keep exp=$exp k=1 sk-prune-dates))
+      # Given the pruned keep list we need to find the 1st useful send side snapshot to start send
+      i=${#keep_snaps[@]}-1
+      while (( i >= 0 )) && [[ "${keep_snaps[$i]}" > "${recv_snaps[@]: -1}" ]]; do let i--; done
+      let i++
+
+      for (( ; i < ${#keep_snaps[@]}; i++ )); do
+         # Need to get the exact file system names matching snap and parent_snap generics since they
+         # may be suffixed with remote hosts (or devices) tags (snap-YYYYMMDD-HHMM,HOST,LABEL,DEV...)
+         a=("${keep_snaps[$i]}"*)
+         # Rename snapshot for adding the new tag
+         IFS=,$'\n'
+         snap=($(printf %s\\n $recv_tag ${a:$snap_strlen+1} | sort -u))
+         snap="${a:0:$snap_strlen},${snap[*]}"
+         IFS=$'\n'
+         [[ $a = $snap ]] || mv "$a" "$snap"
+
+         if [[ -n $parent_snap ]]; then
+            put_log_str "DELTA sending '${keep_snaps[$i]}'"
+            parent_snap=("$parent_snap"*)
+            send_args=("-p" "$parent_snap" "$snap")
+         else
+            put_log_str "FULL sending '${keep_snaps[$i]}'"
+            send_args=("$snap")
+         fi
+         if [[ -n $recv_addr ]]; then
+            btrfs send --proto 2 --compressed-data "${send_args[@]}" | zstd -T$(nproc) | ${ssh_cmd[@]} \
+               "cd \"$recv_dir\" && zstd -d | btrfs receive . && btrfs filesystem sync \"$snap\" && \
+               mv \"$snap\" \"${keep_snaps[$i]}\""
+         else
+            btrfs send --proto 2 --compressed-data "${send_args[@]}" | \
+               ( cd "$recv_dir" && btrfs receive . && btrfs filesystem sync "$snap" && \
+               mv "$snap" "${keep_snaps[$i]}" )
+         fi && {
+            remove_tag "$parent_snap"
+            parent_snap="${keep_snaps[$i]}"
+         } || {
+            # Stop this subvol chain send if something goes wrong
+            remove_tag "$snap"
+            break
+         }
+      done
+      # Pruning phase
+      if [[ -n $recv_addr ]]; then
+         a=($(${ssh_cmd[@]} \
+            "shopt -s nullglob; cd \"$recv_dir\" && printf %s\\\n \"$subvol\"$date_mask")) || exit
+         b=($(sort <<< "${a[*]}"$'\n'"${keep_snaps[*]}" | uniq -d))
+         b=($(sort <<< "${a[*]}"$'\n'"${b[*]}" | uniq -u))
+         [[ -n $b ]] && \
+            ${ssh_cmd[@]} "cd \"$recv_dir\" && xargs -rd\\\n btrfs subvolume delete" <<< "${b[*]}"
+      else
+         (
+            cd "$recv_dir" || exit
+            a=($(printf %s\\n "$subvol"$date_mask))
+            b=($(sort <<< "${a[*]}"$'\n'"${keep_snaps[*]}" | uniq -d))
+            b=($(sort <<< "${a[*]}"$'\n'"${b[*]}" | uniq -u))
+            [[ -n $b ]] && btrfs subvolume delete "${b[@]}"
+         )
+      fi
+      popd >/dev/null
+   else
+      put_log_str "Error: invalid subvolume '$1', skipped"
+   fi
+   echo
+   shift
+done
+
+unlock_send
+if [[ -n $recv_addr ]]; then
+   echo done >&${ssh_proc[1]}
+else
+   exec {recv_bdev_lock}>&-
+   exec {recv_dir_lock}>&-
+fi
+put_log_str "DONE"
+

@@ -1,0 +1,777 @@
+#!/bin/bash
+
+help () {
+cat >&2 <<EOF
+hashworks -- Written by Sandro Floridia
+Cache and hash backed file system Scan, Hash, Dedup, Diff and Sync tools
+
+hw-cache   hash cache management front/backend: build, update and query
+hw-dedup   file deduplicator: report and purge
+hw-diff    text/binary file diffing wrapper
+hw-sync    local and remote interactive/unattended file system synchronizer
+
+Syntax:  $cmd_name [-switches] [FILE|DIR[LIST]] [...] [-switches] [...]
+
+Standard run without path arguments loads default config file path list at
+'~/.hashworks' then starts scan/hash job(s) while reading and/or
+updating metadata cache as needed.
+Statistics are not printed by default, overall role of this program is building,
+updating, querying and purging the metadata cache ('~/.cache/hashworks').
+Typical role for what is meant to be used is keeping the cache updated and
+available for other file system tools (which would run it as needed) while
+avoiding wasteful rehashing and offering a clear interface.
+
+Operating mode:
+-s --scan	scan, hash files and (re)build metadata cache databases
+-u --update	scan, hash new or changed files and update cache
+-q --query	print database records matching requested content (default)
+-c --clean	clean cache from old missing/mismatching entries
+--wipe		delete entire metadata cache
+
+Input arguments mode:
+-d --dir	read next arguments as directories (default)
+-D --dir-list	read next arguments as directory-list files
+-f --file	read next arguments as files
+-F --file-list	read next arguments as file-list files
+
+Options:
+-		add stdin as list source according current -[dDfF] mode
+--		stop parsing, read remaining arguments according -[dDfF] mode
+-a --all	add config file scan list (default if no content specified)
+-r --raw	print raw metadata instead of human readable aligned table
+-P --format=	metadata fields to print: (h)ash (d)ate (s)ize (n)ame
+		default is 'hdsn'
+-H --hash-cmd=	set custom hash tool command line instead of '$hash_cmd'
+-1 --serial	do not parallelize (device-wise) scan and hash jobs
+-v --verbose	log between processes, '-vv' log file actions
+-h --help	print this help screen
+EOF
+}
+# As for multiple devices paths jobs can run in parallel this cats to stderr without messing up output
+mutex_cat () {
+   exec {lock}> $tmp/stderr.lock
+   flock $lock
+   cat "$@" >&2
+   exec {lock}>&-
+}
+log_msg () {
+   local e=$?	# Hold current error status and print a message to stderr
+   echo $(date +%Y%m%d-%H%M.%S)" -- $cmd_name ($e) $@" >&2
+   return $e
+}
+log_warn () { log_msg "Warning, $@"; }
+log_warn_above () { log_warn 'please check messages above'; }
+log_error () { log_msg "Fatal error, $@"; exit; }
+log_error_generic () { log_error 'please check failing process'; }
+
+export TMPDIR=/dev/shm LC_ALL=C
+shopt -s nullglob
+IFS=$'\n'
+cmd_name=${0##*/}
+hash_cmd='b2sum -l256'
+
+#tmp=$(mktemp -d) || log_error_generic
+#chmod 700 $tmp
+#trap '[[ -d $tmp ]] && { cd /; rm -- $tmp/*; rmdir -- $tmp; }' EXIT
+tmp=/dev/shm/hw-tmp
+if [[ -d $tmp ]]; then
+   rm -fd -- $tmp/*{/*,}
+else
+   mkdir $tmp
+fi
+
+slash=: # Reserved char replacing slash as sub-dir name separator in databases label naming convention
+run_dir=$PWD
+cache_dir=~/.cache/hashworks
+cfg_file=~/.config/hashworks
+op_mode=q
+arg_mode=d
+declare -i i list_i
+
+while (( $# )); do
+   case "$1" in
+      -) stdin=1 ;;
+      --) shift; break ;;
+      -*) # Arguments pre-parsing: canonicalize flags and parameters
+         case "$1" in
+            --[[:alnum:]]*) arg1=${1:2} ;;&
+            --[[:alnum:]]*=*) arg2=${arg1#*=}; arg1=${arg1%%=*}= ;;
+            -[[:alnum:]]*) arg_i=1 ;;
+         esac
+         while :; do
+            (( arg_i )) && {
+               arg1=${1:$arg_i:1}
+               # Check if the one-char option matches within parametric ones
+               if [[ $arg1 = [PH] ]]; then
+                  # Is assignment adjacent without space?
+                  if (( arg_i < ${#1}-1 )); then arg2=${1:$arg_i+1}; else arg2=$2; shift; fi
+                  arg_i=0
+               else
+                  (( ++arg_i < ${#1} )) || arg_i=0
+               fi
+            } # Pre-parsing done
+            case "$arg1" in
+               [suqc]|scan|update|query|clean|wipe) op_mode=${arg1:0:1} ;;
+               d|dir|f|file) arg_mode=${arg1:0:1} ;;
+               D|dir-list) arg_mode=D ;;
+               F|file-list) arg_mode=F ;;
+               r|raw) raw=1 ;;
+               P|format=) print_fmt=$arg2 ;;
+               H|hash-cmd=) hash_cmd=$arg2 ;;
+               1|serial) serial=1 ;;
+               v|verbose) let verbose++ ;;
+               h|help) help; exit ;;
+               *) help; log_error "unknown option '-$arg1'" ;;
+            esac
+            (( arg_i )) || break
+         done ;;
+      *) case $arg_mode in
+            d) dirs+=("$1") ;;
+            D) dirs_l+=("$1") ;;
+            f) files+=("$1") ;;
+            F) files_l+=("$1") ;;
+         esac ;;
+   esac
+   shift
+done
+
+[[ $op_mode = w ]] && {
+   [[ -d $cache_dir ]] && cd "$cache_dir" && {
+      a=-f; (( verbose )) && a+=v
+      rm $a -- db_*
+   }
+   exit
+}
+
+cd $tmp || log_error_generic
+# Canonicalize all possible sources and converge in a bunch of named pipes to avoid extra copy
+(( stdin )) && {
+   case $arg_mode in
+      d) dirs+=(/dev/stdin) ;;
+      D) dirs_l+=(/dev/stdin) ;;
+      f) files+=(/dev/stdin) ;;
+      F) files_l+=(/dev/stdin) ;;
+   esac
+}
+mk_pipe () { mkfifo $1; tee > $1 & }
+(( ${#dirs[@]} )) && { printf %s\\n "${dirs[@]}" | mk_pipe p1; dirs_l+=(p1); }
+(( ${#files[@]} )) && { printf %s\\n "${files[@]}" | mk_pipe p2; files_l+=(p2); }
+# If there are unprocessed arguments left after initial parsing loop it's because of -- option,
+# they converge as input according current mode set
+(( $# )) && case $arg_mode in
+   d) printf %s\\n "$@" | mk_pipe p3; dirs_l+=(p3) ;;
+   f) printf %s\\n "$@" | mk_pipe p4; files_l+=(p4) ;;
+   D) dirs_l+=("$@") ;;
+   F) files_l+=("$@") ;;
+esac
+
+(( ${#dirs_l[@]} )) && {
+   # Add a final / to dirs to help further manipulation, avoid adding that to root folder
+   cat -- "${dirs_l[@]}" | (cd "$run_dir" && xargs -rd\\n realpath -ms --) | sed 's:[^/]$:&/:' \
+      | sort -uo dirs
+   d_in=1
+}
+(( ${#files_l[@]} )) && {
+   cat -- "${files_l[@]}" > tmp
+   # Path canonicalization requirement check: fast isolation of those entries really needing care
+   pre_filter () { grep -Ee '^[^/]' -e '(^|/)\.\.?(/|$)' -e // "$@"; }
+   if pre_filter tmp > tmp2; then
+      pre_filter -v tmp | sort -uo files - <(cd "$run_dir" && xargs -rd\\n -a $tmp/tmp2 realpath -ms --)
+   else
+      sort -uo files tmp
+   fi
+   rm -- tmp{,2}
+   f_in=1
+}
+(( d_in+f_in )) || { help; exit; }
+a=(p[0-9]); (( ${#a} )) && rm -- ${a[@]}
+
+[[ -d /run/user/$UID ]] || mkdir /run/user/$UID || log_error_generic
+# Check and clean cache directory
+[[ -d $cache_dir ]] || mkdir -p "$cache_dir" || log_error "can't make cache directory '$cache_dir'"
+cd "$cache_dir" || log_error "can't access cache directory '$cache_dir'"
+a=(db_*.tmp); (( ${#a} )) && rm -- "${a[@]}"
+cd $tmp
+
+# Define a pathname sanitizer string for sed, used to produce Basic Regular Expression (BRE) patterns.
+# Metachars [].*^$ and sed adopted separator : must be escaped to be treated as literal
+path_escaper='s:[].*^$:[]:\\&:g'
+# The final filter-generator adds a leading caret (^) to anchor on string start
+path_filter="$path_escaper; s:^:^:"
+
+# Reserved char check: '&' is a special one used in sed s-mode as substitution field
+# 'slash' (:) is both used as sed s-mode separator and as '/' substitute for database filenames
+check_name () { grep -Fe\\ -e$'\t' -e$'\a' "$@"; }
+log_warn_bad_name () { log_warn "$1 above skipped as using one of reserved chars $2"; }
+(( d_in )) && check_name -e\& -e"$slash" dirs >&2 && {
+   log_warn_bad_name directories "\ \n \t \a & $slash"
+   check_name -ve\& -e"$slash" dirs > tmp || d_in=0
+   mv tmp dirs
+}
+(( f_in )) && check_name files >&2 && {
+   log_warn_bad_name files '\ \n \t \a'
+   check_name -v files > tmp || f_in=0
+   mv tmp files
+}
+
+### Defining functions for generating a tab with mountpoints/symlinkpoints, block devices and UUIDs
+
+fstab_sort () { sort -t$'\t' -k1,1 "$@"; }
+# Get system reference mountpoints tab
+findmnt -vPo target,source,uuid > tmp
+# Format findmnt output in a tab spaced 3 column tab: mountpoint, block device and UUID
+paste \
+   <(cut -d\" -f2 tmp | sed 's:[^/]$:&/:') \
+   <(cut -d\" -f4 tmp | sed 's:^[^/].*:no_dev:; s:^/\(dev/[^0-9]\+\).*:\1:; s:\W:_:g') \
+   <(cut -d\" -f6 tmp | sed 's:.\+:\L&:; s:[^0-9a-z]::g; s:^$:no_uuid:') \
+   | fstab_sort -o fstab
+sed 's:\t.*::; s:^:^:' fstab > fstab_filter
+
+# 'find_symlpoint' scans input list for directory symlinks and when detected outputs a fstab-like
+# line formatted as findmnt command above: symlink path, physical device and filesystem UUID.
+find_symlpoint () {
+   local t=find_symlpoint
+   # Routine accepts real symlinks candidates, avoid '/' or 'sed 's:/$::'' will empty the string!
+   # Sed here cuts trailing '/' for correct symlink detection by 'find' command
+   sed 's:/$::' | \
+      xargs -rd\\n bash -c 'find "$@" -maxdepth 0 -type l -xtype d -printf %l/\\t%p/\\n' '' | \
+      sed s://:/: > $t.pairs
+   [[ -s $t.pairs ]] && {
+      grep -of fstab_filter $t.pairs > $t.mounts
+      cut -f2 $t.pairs | paste $t.mounts - | fstab_sort -o $t.tmp
+      join --nocheck-order -t$'\t' -o 1.2,2.2,2.3 $t.tmp fstab | fstab_sort
+   }
+   rm -- $t.*
+}
+
+
+### Directories list processing
+
+(( d_in )) && {
+   a='[^/]\+/' # Directory depth increment filter
+   b=^/$a
+   i=0
+   # Collect all directories for further symlink check, skip root as it obviously can't be a symlink
+   while grep -o "$b" dirs > list0; do
+      let i++
+      uniq list0 list$i
+      b+=$a
+   done
+   if (( i )); then
+      eval sort -mo list{0..$i}
+      # Add detected symlinks to system fstab as pseudo-mountpoints
+      fstab_sort -mo tmp fstab <(find_symlpoint < list0)
+      # Filter directories list with mountpoints to get the list of the really needed ones
+      grep -of <(cut -f1 tmp | sed s:^:^:) dirs > list0
+      # From all mountpoints get the fitting ones, sort in reversed order to prioritize deeper paths
+      join --nocheck-order -t$'\t' list0 tmp | sort -ruo d_fstab
+   else
+      # This is when directory list contains the root directory, only root mountpoint line is needed
+      grep ^/$'\t' fstab > d_fstab
+   fi
+   eval rm -- list{0..$i}
+   # Mountpoints and symlinks are taken into account to correctly divide lists per device and filesystem
+   {
+      read -r line
+      # Get combined filesystem info (block-device and UUID string)
+      cur_fs=${line#*$'\t'}
+      set_fs=$cur_fs
+      while :; do
+         # Scan mounts tab and group those with common block device and UUID
+         while [[ $cur_fs = $set_fs ]]; do
+            mount=${line%%$'\t'*}
+            printf %s\\n "^$mount" >> m_filter
+            read -r line
+            cur_fs=${line#*$'\t'}
+         done
+         bdev=${set_fs%$'\t'*}
+         uuid=${set_fs#*$'\t'}
+         fs=fs_$uuid
+         [[ -d $fs ]] || mkdir -- $fs
+         printf %s\\n $uuid >> $bdev.uuids
+         if (( ${#line} )); then
+            if [[ -s $fs/dirs ]]; then
+               # As entries need to be merged and yet sorted, do it with cheap and effective 'sort -m'
+               grep -f m_filter dirs | sort -mo tmp - $fs/dirs; mv tmp $fs/dirs
+            else
+               grep -f m_filter dirs > $fs/dirs
+            fi
+            # Cut out pulled entries as routine optimizes last batch filtering with a simple copy/move
+            grep -vf m_filter dirs > tmp
+            mv tmp dirs
+         else
+            # When line (ahead) is empty this is the last batch of entries, so grep would be wasteful
+            if [[ -s $fs/dirs ]]; then
+               cat dirs >> $fs/dirs
+            else
+               mv dirs $fs/dirs
+            fi
+            break
+         fi
+         set_fs=$cur_fs
+         rm m_filter
+      done
+   } < d_fstab
+}
+
+
+### Files list processing
+
+(( f_in )) && {
+   # Extract paths from files list, to be further used for symlink scan and fast filtering prediction
+   grep -o .\*/ files | uniq | sort -uo paths
+   a='[^/]\+/' # Directory depth increment filter
+   b=^/$a
+   i=0
+   # Collect all directories for further symlink check, skip root as it obviously can't be a symlink
+   while grep -o "$b" paths > list0; do
+      let i++
+      uniq list0 list$i
+      b+=$a
+   done
+   if (( i )); then
+      eval sort -mo list{0..$i}
+      # Add detected symlinks to system fstab as pseudo-mountpoints
+      fstab_sort -mo tmp fstab <(find_symlpoint < list0)
+      # Filter directories list with mountpoints to get the list of the really needed ones
+      grep -of <(cut -f1 tmp | sed s:^:^:) paths > list0
+      # From all mountpoints get the fitting ones, sort in reversed order to prioritize deeper paths
+      join --nocheck-order -t$'\t' list0 tmp | sort -ruo f_fstab
+   else
+      # This is when all input files sit in root directory, only root mountpoint line is needed
+      grep ^/$'\t' fstab > f_fstab
+   fi
+   eval rm -- list{0..$i}
+   # Mountpoints and symlinks are taken into account to correctly divide lists per device and filesystem
+   {
+      read -r line
+      # Get combined filesystem info (block-device and UUID string)
+      cur_fs=${line#*$'\t'}
+      set_fs=$cur_fs
+      while :; do
+         # Scan mounts tab and group those with common block device and UUID
+         while [[ $cur_fs = $set_fs ]]; do
+            mount=${line%%$'\t'*}
+            printf %s\\n "^$mount" >> m_filter
+            read -r line
+            cur_fs=${line#*$'\t'}
+         done
+         bdev=${set_fs%$'\t'*}
+         uuid=${set_fs#*$'\t'}
+         fs=fs_$uuid
+         [[ -d $fs ]] || mkdir -- $fs
+         printf %s\\n $uuid >> $bdev.uuids
+         if (( ${#line} )); then
+            # As paths list comes from files list, it is used also as quick and safe prediction
+            # for further file list filtering
+            if [[ -s $fs/paths ]]; then
+               # As entries need to be merged and yet sorted, do it with cheap and effective 'sort -m'
+               grep -f m_filter paths | sort -mo tmp - $fs/paths; mv tmp $fs/paths
+               grep -f m_filter files | sort -mo tmp - $fs/files; mv tmp $fs/files
+            else
+               grep -f m_filter paths > $fs/paths
+               grep -f m_filter files > $fs/files
+            fi
+            # Cut out pulled entries as routine optimizes last batch filtering with a simple copy/move
+            grep -vf m_filter paths > tmp; mv tmp paths
+            grep -vf m_filter files > tmp; mv tmp files
+         else
+            # When line (ahead) is empty this is the last batch of entries, so grep would be wasteful
+            if [[ -s $fs/paths ]]; then
+               cat paths >> $fs/paths
+               cat files >> $fs/files
+            else
+               mv paths $fs/paths
+               mv files $fs/files
+            fi
+            break
+         fi
+         set_fs=$cur_fs
+         rm m_filter
+      done
+   } < f_fstab
+}
+
+
+# Polish block devices UUIDs lists by deduplication
+for f in *.uuids; do sort -uo $f $f; done
+
+### Highest CPU load block: hashing/matching/updating file lists
+
+process_list () {
+   local -i i whole_dir
+   
+   # Get available database list and convert from label friendly format to real path usable format
+   cd "$cache_dir"
+   dbs=(db_$uuid*)
+   cd $tmp/$fs
+   { (( ${#dbs[@]} )) && sed "s,^[^$slash]\+,,; s,$slash,/,g" <<< "${dbs[*]}"; } > dbs
+   
+   # From the database list will be generated a multiple regex pattern for directories selection
+   sed "$path_filter" dbs > dbs_BRE
+   
+   (( verbose )) && [[ $op_mode = [su] ]] && {
+      unset a; i=$(wc -l < found)
+      (( serial )) || a="${bdev:4}  "
+      echo "$a$i(f)  ${dir:0:-1}"
+   }
+   unset parent_db db_i
+   # Find the closest backing database: parent or direct if exist
+   # grep -of does a great job here printing the longest and closest match to dir
+   backing_dir=("$(grep -of dbs_BRE <<< "$dir")")
+   (( ${#backing_dir} && ${#backing_dir} < ${#dir} )) && {
+      # Closest database is a parent (higher path hierarchy), make the path trimming filter string
+      parent_db="$cache_dir/db_$uuid${backing_dir////$slash}"
+      dir_cut="${dir:${#backing_dir}}"
+   }
+   work_db_n="db_$uuid${dir////$slash}"
+   work_db=$cache_dir/$work_db_n
+
+   # '--scan' mode when combined with directory always drops old data rehashing everything
+   [[ $op_mode = s ]] && (( whole_dir )) || {
+      (( ${#backing_dir} )) && {
+         let db_i++
+         if (( ${#parent_db} )); then
+            # Parent database mode: get matching pathnames and output a shortened version as migrated
+            # to a deeper path level, which in turn will be offset by a longer database label
+            # Sed here does 2 jobs in 1 call: select matching lines, modify and print just that ones
+            sed -n s:^"$dir_cut"::p "$parent_db" > db1
+         else
+            # Direct database mode
+            cat "$work_db" > db1
+         fi
+      }
+      # Filter nested databases source, generate merge lists
+      while read -r db; do
+         let db_i++
+         sed "s:^:${db:${#dir}}:" "$cache_dir/db_$uuid${db////$slash}" > db$db_i
+      done < <(grep "$(sed "$path_filter" <<< "$dir")". dbs)
+
+      # Presence of any merge lists means there is some cached metadata to start with
+      (( db_i )) && {
+         if (( db_i > 1 )); then
+            # Feed merge-mode sort with the sources, each one is individually inode sorted yet
+            eval sort -mo db -- db{1..$db_i}
+            eval rm -- db{1..$db_i}
+         else
+            mv db{1,}
+         fi
+         # Metadata optimization
+         (( whole_dir )) && {
+            # Directory-scan mode:
+            # Filter unchanged entries by comparing backing database and current scan, the unmatched
+            # rest can be safely discarded from db since the whole directory scan proves exactly
+            # what's there and what's not anymore
+            join --nocheck-order -t$'\a' db found > tmp
+            mv tmp db
+         }
+         [[ $op_mode = u ]] && {
+            # From found files list filter those really needing processing: new or changed ones
+            join --nocheck-order -t$'\a' -v2 db found > tmp
+            mv tmp found
+         }
+         (( whole_dir )) || {
+            # File-list-scan mode: coming from a custom external list, the queried entries may be a
+            # subset of directory, mutual exclusion (matched or not) is not valid to establish
+            # which content doesn't exist anymore. So the backing db will be just purged from those
+            # entries mismatching, not for missing
+            join --nocheck-order -t$'\t' -v1 db found > tmp
+            mv tmp db
+         }
+      }
+   }
+
+   if [[ -s found && $op_mode == [su] ]]; then
+      # Make a lock to avoid concurrent program instances on same block device, usually hashing
+      # routine is faster than devices sequential read, this avoids jerkiness and performance loss
+      exec {bdev_lock}> /run/user/$UID/io_stress_b$bdev.lock
+      flock $bdev_lock
+      # Calculate hashes, check hash_cmd exit status (important), join to metadata
+      cut -f1 found | {
+         cmd () { ( cd "$dir" && xargs -rd\\n $hash_cmd -- ); }
+         if (( verbose > 1 )); then
+            # Verbose mode prints the promptly calculated hashes and full path file-names using
+            # File descriptor 5 in a forked pipe output with tee command
+            cmd | tee >(sed "s:\s\+:&$dir:" >&5)
+            (( ${PIPESTATUS[0]} )) && false || true
+         else
+            cmd
+         fi
+      } 5>&1 > hash || {
+         # Hashsum interrupted (for ex. by user) or (partially) fails for some (unreadable) files
+         log_warn 'hashsum process abnormal termination'
+         # Check: if hash-list file does not end with a newline edit it discarding last line
+         [[ -n $(tail -c1 hash) ]] && sed -i \$d hash
+         # join query list with sanitized hash-list names to promote the only pairable ones
+         cut -c$(($hash_w+3))- hash | join --nocheck-order -t$'\t' found - > tmp
+         mv tmp found
+      }
+      # Release lock for device high load
+      exec {bdev_lock}>&-
+      cmd () { cut -c-$hash_w hash | paste -d$'\a' found -; }
+      if (( db_i )); then
+         cmd | sort -mo "$work_db".tmp db -
+      else
+         cmd > "$work_db".tmp
+      fi
+   elif (( ${#backing_dir} == ${#dir} && db_i == 1 )) && \
+      size=($(stat -c %s -- db "$work_db")) && (( size[0] == size[1] )); then
+      # When here: no files needed (re)hashing, direct db is there yet, no nested db(s) to assemble,
+      # the temp db size is identical to direct db. So it's safe to assume old and fresh one identical.
+      # Having nothing to update, just exit
+      return
+   else
+      mv db "$work_db".tmp
+   fi
+   sync "$work_db".tmp
+
+   # Avoid old/new metadata overlapping upon interruption by doing deletions first
+   # If parent database is involved replace it with a purged version
+   (( ${#parent_db} )) && {
+      if grep -v "$(sed "$path_filter" <<< "$dir_cut")" "$parent_db" > tmp; then
+         mv tmp "$parent_db".tmp
+         sync "$parent_db".tmp
+         # Atomically replace with purged version
+         mv "$parent_db"{.tmp,}
+      else
+         rm -- "$parent_db"
+      fi
+   }
+   # Delete (old) nested db(s), a slash char after file globbing avoids deleting .tmp file(s)
+   (
+      cd "$cache_dir" || exit
+      set -- "$work_db_n"?*"$slash"
+      (( $# )) && rm -- "$@"
+   )
+
+   if [[ -s $work_db.tmp ]]; then
+      # Placing new/updated database atomically
+      mv "$work_db"{.tmp,}
+   else
+      rm -f -- "$work_db"{.tmp,}
+   fi
+}
+
+
+query_list () {
+   local -i i whole_dir
+   
+   # Get available database list and convert from label friendly format to real path usable format
+   cd "$cache_dir"
+   dbs=(db_$uuid*)
+   cd $tmp/$fs
+   { (( ${#dbs[@]} )) && sed "s,^[^$slash]\+,,; s,$slash,/,g" <<< "${dbs[*]}"; } > dbs
+   
+   # From the database list will be generated a multiple regex pattern for directories selection
+   sed "$path_filter" dbs > dbs_BRE
+   
+   unset parent_db db_i
+   # Find the closest backing database: parent or direct if exist
+   # grep -of does a great job here printing the longest and closest match to dir
+   backing_dir=("$(grep -of dbs_BRE <<< "$dir")")
+   (( ${#backing_dir} && ${#backing_dir} < ${#dir} )) && {
+      # Closest database is a parent (higher path hierarchy), make the path trimming filter string
+      parent_db="$cache_dir/db_$uuid${backing_dir////$slash}"
+      dir_cut="${dir:${#backing_dir}}"
+   }
+   work_db_n="db_$uuid${dir////$slash}"
+   work_db=$cache_dir/$work_db_n
+
+   (( ${#backing_dir} )) && {
+      let db_i++
+      if (( ${#parent_db} )); then
+         # Parent database mode: get matching pathnames and output a fullpath version
+         # Sed here does 2 jobs in 1 call: select matching lines, modify and print just that ones
+         sed -n "s:^$dir_cut:$backing_dir&:p" "$parent_db" > db1
+      else
+         # Direct database mode
+         sed s:^:"$dir": "$work_db" > db1
+      fi
+   }
+   # Filter nested databases source, generate merge lists
+   while read -r db; do
+      let db_i++
+      sed s:^:"$db": "$cache_dir/db_$uuid${db////$slash}" > db$db_i
+   done < <(grep "$(sed "$path_filter" <<< "$dir")". dbs)
+
+   # Presence of any merge lists means there is some cached metadata to start with
+   (( db_i )) && {
+      let list_i++
+      if (( db_i > 1 )); then
+         # Feed merge-mode sort with the sources, each one is individually inode sorted yet
+         eval sort -mo ls$list_i -- db{1..$db_i}
+         eval rm -- db{1..$db_i}
+      else
+         mv db1 ls$list_i
+      fi
+      (( whole_dir )) || {
+         join --nocheck-order -t$'\t' ls$list_i found > tmp
+         mv tmp ls$list_i
+      }
+   }
+}
+
+
+# From file paths list detect the independent hierarchies and keep the topmost path for each group
+group_paths () {
+   # Minimum path depth detection: take 1st entry as a good (speculative) starting point
+   read -r a < paths
+   a=${a//[^\/]/} # Slash replicas indicating depth level
+   i=${#a}-1 # Depth level
+   (( i )) && {
+      # Make an analyze friendly and slim temp file from paths list by filtering
+      # just slashes and cut out any depth equal or higher than current one
+      tr -cd /\\n < paths | grep -Fv $a | uniq - tmp
+      # Avoiding sort purposely in favour of grep in -F mode (fewer and faster passes)
+      # Once temp file gets shrunk to zero the lowest path depth has been detected in 'i'
+      while [[ -s tmp ]] && (( i )); do
+         a=${a:1}
+         let i--
+         # On each confirmed depth pass cut out the slash-based strings sized equal or higher as
+         # current test, making analysis file drastically shorter
+         grep -Fv $a tmp > tmp2
+         mv tmp{2,}
+      done
+   }
+   if (( i )); then
+      b='[^/]\+/' # Directory depth increment filter
+      a=${a:1}
+      # Replace each '/' with depth filter to build the starting filter from lowest path
+      a=^/${a////$b}
+      while :; do
+         # Paths matching exactly current depth filter gets collected apart
+         grep "$a$" paths > tmp && {
+            cat tmp >> paths2
+            # Strip out from main list previous collected paths ALONG with any sub-path,
+            # sub-paths are stripped too because the upper path works as grouping filter
+            sed s:^:^: tmp > filter
+            grep -vf filter paths > tmp || break
+            mv tmp paths
+         }
+         a+=$b # Depth level increment
+      done
+      # Update paths with the redefined layout (nested paths now merged)
+      mv paths{2,}
+   else
+      # Lowest directory depth case, as this owns everything (at least within same file system
+      # mounted as root) just set for a whole big list
+      echo / > paths
+   fi
+}
+
+
+# Replace any space in hash_cmd string with the only recognized IFS separator '\n' or
+# any included argument will be interpreted as part of command name
+hash_cmd=${hash_cmd// /$'\n'}
+# Get the hash width
+a=$($hash_cmd <<< '') || log_error_generic
+a=${a%% *}
+hash_w=${#a}
+# Final database record: (1)path-with-name (2)date (3)size (4)hash
+# %p or %P is not included in leading part of find_fmt because put on call basis
+find_fmt='\t%T@\t%s\n'
+
+### Main loop
+
+for bdev in *.uuids; do
+   bdev=${bdev%.*}
+   while read -ru3 uuid; do
+      fs=fs_$uuid
+      cd $tmp/$fs
+      exec {db_fs_lock}> /run/user/$UID/hashworks_db_$uuid.lock
+      flock $db_fs_lock
+
+      if [[ $op_mode = q ]]; then
+         [[ -s dirs ]] && {
+            while read -ru4 dir; do
+               whole_dir=1 query_list
+            done 4< dirs
+         }   
+         [[ -s files ]] && {
+            group_paths
+            while read -ru4 dir; do
+               grep "^$dir" files > found && query_list
+            done 4< paths
+         }
+         if (( list_i == 1 )); then
+            mv ls1 ls
+         elif (( list_i > 1 )); then
+            eval sort -mo ls -- ls{1..$list_i}
+            eval rm -- ls{1..$list_i}
+         fi
+      else
+         [[ -s dirs ]] && {
+            # Iterate directory list and source any (partially) matching database entries
+            while read -ru4 dir; do
+               # Collect files metadata, -mindepth 1 avoids bad behaviour if the start point
+               # is a file
+               find "$dir" -xdev -mindepth 1 -path '*[\\'$'\n\t\a'']*' \
+               \( -type d -fprint bad_dirs -prune -o \
+                  -type f -fprint bad_files \) -o \
+                  -type f -printf "%P$find_fmt" 2> tmp | sort -o found
+               ps=(${PIPESTATUS[@]})
+               [[ -s bad_dirs ]] && \
+                  mutex_cat bad_dirs <(log_warn_bad_name directories '\ \n \t \a' 2>&1)
+               [[ -s bad_files ]] && \
+                  mutex_cat bad_files <(log_warn_bad_name files '\ \n \t \a' 2>&1)
+               rm -- bad_{dirs,files}
+               
+               [[ -s found ]] || {
+                  (( ${ps[0]} )) && {
+                     dir=${dir%/}
+                     if [[ -e $dir ]]; then
+                        [[ -d $dir ]] || {
+                           log_warn "'$dir' is not a directory, skipped"
+                           rm -f -- found tmp
+                        }
+                     else
+                        log_warn "directory '$dir' does not exist, skipped"
+                        rm -f -- found tmp
+                     fi
+                  }
+               }
+               [[ -s tmp ]] && mutex_cat tmp <(log_warn_above 2>&1)
+               [[ -f found ]] && whole_dir=1 process_list
+            done 4< dirs
+         }
+         [[ -s files ]] && {
+            group_paths
+            while read -ru4 dir; do
+               # Within one call using sed for both filtering matched paths and replacing base
+               # path with a relative ./ to sanitize find arguments from possible dash '-'
+               # leading names. The subshell is used to flow xargs' args in a way for proper
+               # positioning into find
+               sed -n "s:^$dir:./:p" files | (cd "$dir" && xargs -rd\\n bash -c \
+                  'find "$@" -maxdepth 0 -type f -printf "%p'"$find_fmt"\" '') \
+                  2> tmp | cut -c3- > found
+               [[ -s tmp ]] && mutex_cat tmp <(log_warn_above 2>&1)
+               [[ -s found ]] && process_list
+            done 4< paths
+         }
+      fi
+
+      exec {db_fs_lock}>&-
+   done 3< $bdev.uuids & # Run in background to allow parallel jobs
+   (( serial )) && wait
+done
+wait
+cd $tmp
+
+[[ $op_mode = q ]] && {
+   list=(fs_*/ls)
+   i=${#list[@]}
+   (( i )) && {
+      (( i > 1 )) && {
+         sort -mo ls -- ${list[@]}
+         list=ls
+      }
+      if (( raw )); then
+         cat $list
+      else
+         cut -f2 $list | sed s:^:@: | date -f - +%Y%m%d-%H%M.%S > dates
+         paste $list dates | column -ts$'\t\a' -H2 -R3 -O 4,5,3,1
+      fi
+   }
+}
+
+# column -ts$'\t\a' -O 4,2,3,1 --- | less

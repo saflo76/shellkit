@@ -1,0 +1,9 @@
+#!/bin/bash
+
+dev="/sys/block/$1/device/delete"
+if [[ -e "$dev" ]]; then
+   echo -n 1 > "$dev"
+else
+   echo 'Error: device interface not found'
+fi
+

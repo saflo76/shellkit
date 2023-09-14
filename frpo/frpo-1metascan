@@ -1,0 +1,53 @@
+#!/bin/bash
+
+cmd_name=${0##*/}
+
+[[ $1 == -h ]] && {
+cat >&2 <<EOF
+FRPO - File Recovery Priority Organizer
+files metadata scanner
+
+Usage:	$cmd_name [RELATIVE_DIR_PATH] [...] > METADATA_LIST
+
+Examples:
+  Tipical scan retaining just the needed relative paths
+  $ (cd /bad/disk/mystuff && $cmd_name) > mystuff.list
+
+  Interactive directory change to use shell autocomplete for fast contents surfing/typing
+  $ cd /bad/disk
+  $ $cmd_name work/docs media/videos > /safe/place/various.list
+
+  Full path scan to retain absolute paths
+  $ $cmd_name /bad/disk/{work/docs,media/videos} > various.list
+EOF
+exit
+}
+log_msg () { echo "($cmd_name) $@" >&2; }
+
+export LC_ALL=C TMPDIR=/dev/shm
+if (( $# )); then
+   for dir in "$@"; do
+      [[ -d "$dir" ]] || {
+         log_msg "Error: directory '$dir' wrong or unreachable"
+         err=1
+      }
+   done
+   if (( err )); then
+      log_msg 'Execution aborted'
+      exit
+   else
+      log_msg 'Directory arguments check passed'
+   fi
+   path_f=p
+else
+   path_f=P # %P avoids a leading './' on output when using find without file system arguments
+fi
+
+warn_p=$(log_msg 'Warning: ' 2>&1)
+warn_s=" '%$path_f' skipped as name includes one of the reserved chars \\\n\\\t\\\a\n"
+
+find "$@" \! -empty \( -name '*['$'\n\t\a'']*' \
+   \( -type f -fprintf /dev/stderr "$warn_p"file"$warn_s" -o \
+      -type d -fprintf /dev/stderr "$warn_p"directory"$warn_s" -prune \) -o \
+   -type f \! -iname desktop.ini \! -iname thumbs.db -printf "%TY%Tm%Td-%TH%TM\t%s\t%$path_f\n" \)
+

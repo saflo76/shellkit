@@ -1,0 +1,12 @@
+#!/bin/bash
+
+(( $# < 2 )) && {
+cat >&2 <<EOF
+Run program after PID process exits
+
+Syntax:  ${0##*/} PID PROGRAM [ARG] [...]
+EOF
+exit
+}
+
+tail --pid="$1" -f /dev/null && "${@:2}"

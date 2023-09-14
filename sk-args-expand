@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# This script does basic positional arguments canonicalization, it's specific for tools not supporting
+# adjacent 1-char flags, whereas for a straightforward shell-side parsing use "sk-args-canon" instead
+# - expands adjacent 1-char flags into independant ones:
+#   "-abc" -> "-a" "-b" "-c"
+# - splits adjacent 1-char parameters in two arguments:
+#   "-aSTRING" -> "-a" "STRING"
+# - positional arguments are parsed until a "--" is encountered
+
+# Must be run by sourcing it (. script) after setting in "args_par" an adjacent set of the 1-char
+# parametric options (those that need a parameter, if any).
+
+unset args args_i
+while (( $# )); do
+   case "$1" in
+      -[[:alnum:]]*)
+         for (( args_i=1; args_i < ${#1}; args_i++ )); do
+            args+=("-${1:$args_i:1}")
+            if [[ ${1:$args_i:1} = [$args_par] ]]; then
+               # parameter and assignment adjacent without space?
+               if (( args_i < ${#1}-1 )); then
+                  args+=("${1:$args_i+1}")
+               else
+                  args+=("$2")
+                  shift
+               fi
+               break
+            fi
+         done ;;
+      --) break ;;
+      *) args+=("$1") ;;
+   esac
+   shift
+done
+set -- "${args[@]}" "$@"
+

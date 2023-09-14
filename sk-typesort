@@ -1,0 +1,125 @@
+#!/bin/bash
+
+cmd_name=${0##*/}
+help () {
+cat >&2 <<EOF
+File list rearranger for maximizing solid archive compression
+default sort priority: format, extension, directory and name
+						Written by Sandro Floridia
+
+Syntax:  $cmd_name [options] [FILE_LIST] [...]
+
+Expects input file list by argument or stdin
+Options:
+-d --directory	 sort by directory first
+-e --extension	 rely just on extension for type grouping (no format detection)
+-s --stats	 print scan statistics table, -s once more for column alignment
+-j --jobs=	 max parallel jobs for format detection (default = CPU threads)
+-h --help	 print this help screen
+EOF
+exit
+}
+
+log_msg () {
+   e=$?	# Print a message while holding current error state
+   echo $(date +%Y%m%d-%H%M.%S)" -- $cmd_name ($e) $@" >&2
+   return $e # set error state back
+}
+log_error () { log_msg "Fatal error, $@"; exit; }
+log_error_generic () { log_error 'please check failing process'; }
+
+export TMPDIR=/dev/shm LC_ALL=C
+args_par=j
+. sk-args-canon
+
+while (( $# )); do
+   if [[ $1 = -* ]]; then
+      case "${1:1}" in
+         d|directory) d_sort=1 ;;
+         e|extension) e_sort=1 ;;
+         s|stats) let stats++ ;;
+         j|jobs=) job_c=$2; shift ;;
+         h|help) help; exit ;;
+         -) shift; f_list+=("$@"); break ;;
+         *) help; log_error "unknown option '$1'" ;;
+      esac
+   else
+      f_list+=("$1")
+   fi
+   shift
+done
+
+#trap '
+#[[ -n $tmp_dir ]] && {
+#   cd ..
+#   rm -- $tmp_dir/*
+#   rmdir -- $tmp_dir
+#}' EXIT
+
+if (( e_sort )); then
+   ### Simple mode, no file format detection
+
+   (( d_sort )) && sort_o=(-t$'\t' -k2,2 -k1,1 -k3,3)
+   i_rec='ext,dir,name'
+   o_rec1='$1,$3,$2'
+   o_rec2='$2 $3'
+else
+   ### Regular mode
+
+   tmp_dir=$(mktemp -d) || log_error_generic
+   # Input list must be preloaded to know total file count for a proper job_load setup
+   [[ -z $f_list ]] && {
+      f_list=$tmp_dir/f_list
+      tee > $f_list
+   }
+   file_c=$(cat "${f_list[@]}" | wc -l)
+   (( job_c )) || job_c=$(nproc)
+   # Load distribution to fit all jobs
+   job_args_c=$(($file_c/$job_c))
+   job_args_max=256
+   # Don't excess for single job load so we will have almost all threads working until the end
+   if (( job_args_c > job_args_max )); then
+      job_args_c=$job_args_max
+   else
+      (( job_args_c )) || job_args_c=1
+   fi
+   
+   cat "${f_list[@]}" | xargs -rd\\n -P$job_c -n$job_args_c --process-slot-var=job_n \
+      bash -c "file --mime-type -ENF$'\t' \"\$@\" >> $tmp_dir/\$job_n" '' || log_error_generic
+
+   cd $tmp_dir
+   f_list=([0-9]*)
+   (( d_sort )) && sort_o=(-t$'\t' -k3,3 -k1,1 -k2,2 -k4,4)
+   i_rec='$2,ext,dir,name'
+   o_rec1='$1,$2,$4,$3'
+   o_rec2='$3 $4'
+fi
+
+awk '
+   BEGIN { FS="\t "; OFS="\t" }
+   {
+      if (match ($1,".*/")) {
+         dir=substr ($1,1,RLENGTH)
+         name=substr ($1,RLENGTH+1)
+      } else {
+         dir=""
+         name=$1
+      }
+      if (match (name,"\\.[^.]{1,6}$"))
+         ext=tolower (substr (name,RSTART+1))
+      else
+         ext=""
+      print '"$i_rec"'
+   }' "${f_list[@]}" \
+| sort "${sort_o[@]}" \
+| if (( stats )); then
+   awk "BEGIN { FS=OFS=\"\t\" } { print $o_rec1 }" \
+   | if (( stats > 1 )); then
+      column -ts$'\t'
+   else
+      cat
+   fi
+else
+   awk "BEGIN { FS=\"\t\" } { print $o_rec2 }"
+fi
+
