@@ -27,5 +27,40 @@ Scan update, verbosed one line per file, with mixed input:\
 ``hw-cache -vvu /data/images -f /data/backup/stuff.tar.gz /vm-pool/win*.img -F /data/filelist.txt``
 
 ### FRPO (File Recovery Priority Organizer)
-FRPO is a set of scripts to help a common recovery problem and, I would say **priority**, when you face those almost dead prefailing disk devices.
+FRPO is a set of scripts to help for a common data recovery problem and, I would say **priority**, 
+when you absolutely need to recover the essential data from those almost dead prefailing disk drives.\
+The goal that FRPO tries to achieve mostly matches HDDs (rotational disks) since SSDs usually 
+behave quite differently when they face an important degradation or partial failure.
+
+In these cases what you wish is to leverage your disk the less as possible and the most focused as possible, 
+since any single read (or accidental write), wasted or not, brings it progressively closer
+to the total failure and complete unreadability.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
