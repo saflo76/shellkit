@@ -11,13 +11,17 @@ By indentifying the pertaining physical device per file, device specific scan li
 ``hw-cache`` has 5 operation modes: ``scan``, ``update``, ``query``, ``clean`` and ``wipe``.\
 Query is the default one, since it's typically wasteful to rescan every time.
 
-#### Examples
-File hashsum scan/update, parallel scan/hash kicks in since paths refers to different block devices:\
+##### Examples
+File hashsum scan/update, parallel scan/hash kicks in since paths refers to different block devices:
+
 ``hw-cache -u /data/docs /run/media/MyUSBdrive``
 
-Hashsum query:\
+Hashsum query:
+
 ``hw-cache /data/docs/personal``
 
 Scan update, verbosed one line per file, with mixed input:\
-``hw-cache -vvu /data/images -f /data/vm-pool/win*.img -F /data/filelist``\
-Here ``-f`` switches file names parsing (default is ``-d``), than -F switches files list parsing.
+``-f`` switches file names parsing mode (default is ``-d``)
+``-F`` switches files list parsing.
+
+``hw-cache -vvu /data/images -f /data/backup/stuff.tar.gz /vm-pool/win*.img -F /data/filelist.txt``
