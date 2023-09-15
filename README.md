@@ -8,9 +8,10 @@ Its input can be fed by command line (or ``stdin``) by list of files and/or dire
 
 By indentifying the pertaining physical device per file, device specific scan lists and master databases (UUID dev tagged) are created/maintained so that any deep directory scan and most importantly any hashsum calculation is done parallelized at device level.
 
-``hw-cache'' has 5 operation modes: `scan`, `update`, `query`, `clean` and `wipe`.
-`query` is the default one, since it's typically not needed to rescan every time.
+``hw-cache`` has 5 operation modes: ``scan``, ``update``, ``query``, ``clean`` and ``wipe``.
+Query is the default one, since it's typically wasteful to rescan every time.
 
-Typical use, file hashsum scan/update:
-
-
+File hashsum scan/update:
+``
+*sandro@lab$* hw-cache /data/docs /run/media/MyUSBdrive
+``
