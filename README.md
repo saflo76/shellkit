@@ -21,7 +21,11 @@ Hashsum query:
 ``hw-cache /data/docs/personal``
 
 Scan update, verbosed one line per file, with mixed input:\
-``-f`` switches file names parsing mode (default is ``-d``)
+``-f`` switches file names parsing mode (default is ``-d``)\
 ``-F`` switches files list parsing.
 
 ``hw-cache -vvu /data/images -f /data/backup/stuff.tar.gz /vm-pool/win*.img -F /data/filelist.txt``
+
+### FRPO (File Recovery Priority Organizer)
+FRPO is a set of scripts to help a common recovery problem and, I would say **priority**, when you face those almost dead prefailing disk devices.
+
