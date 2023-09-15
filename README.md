@@ -1,10 +1,12 @@
 # shellkit
+
 Here I will write a brief explanation of a set of scripts that I commonly use in 
 my linux system, two of them maybe considered more like programs (``hw-cache``, 
 ``sk-btrfs-send``) as they are a bit sophisticated in the way they get their job 
 done.
 
 ### hw-cache
+
 ``hw-cache`` is a file system scanner for mass hashsum collection and management, 
 it creates and keeps updated sort of database-like text files, that are smartly 
 divided per respective block device and as occurrence (sub)splitted into smaller 
@@ -52,31 +54,35 @@ behaviour you sense there is no way to perform that long massive surface scan
 needed by the typical recovery software (for ex. ddrescue, photorec, R-Studio, 
 Ontrack...) as the unit "smells of self-destruction".
 
+Premise: FRPO approach mostly suits HDDs (rotational disks) as SSDs usually 
+behave quite differently when they face an important degradation or partial 
+failure, however as it dramatically minimizes device load/usage may turn helpful 
+in many different scenarios.
+
 So consider the case:
 - your crucial data just takes 1-5% of disk space
 - even with hiccups you can somewhat access/surf file system
 - disk is about to die by the way it behaves
 - would you really perform the typical recovery software full surface scan?
 
-Premise: FRPO approach mostly suits HDDs (rotational disks) as SSDs usually 
-behave quite differently when they face an important degradation or partial 
-failure, however as it dramatically minimizes device load/usage may turn helpful 
-in many different scenarios.
-
 In these cases what you want/wish is to leverage your disk the less as possible 
-and in the most accurate way, since any single read or write request brings it 
-ahead of time close to the entire failure and complete unreadability.
+and in the most targeted way, since any single read or write request brings it 
+ahead of time close to the final failure and complete unreadability.
 
-The key ideas to avoid overloading your defective disk are:
+The key points to avoid overloading your defective disk are:
 
-- Take note ahead of time and in order of importance of the real needed 
+- Take note **ahead of time** and in **order of importance** of the real needed
 directories to scan for content recovery
+
+- Surf by hand in those ones, command line browsing (``cd <dir>``, ``cd ..``, 
+``ls -latr``, etc...) avoids file content peeking. So if it's the case, this 
+permits a more accurate directory annotation and so refines 1st point above
 - So, with respect of what just said: if the device is somewhat surfable, what 
-do we really need to surf?
+do we really need to surf 1st?
 - As being dangerous and unneeded, keep in mind to avoid to repeatedly surf that 
-dirs, do it just 1 time in a profitable definitive way\
-- And here it is: do a scan job starting from 1 or more master dirs to just 
-collect all files path, name, size and date in a 
+dirs, do it just 1 time in a profitable definitive way
+- And here how we will do it is: do a scan job starting from 1 or more master 
+dirs to just collect all files path, name, size and date in a 
 precious list file so that can be further examined, splitted, elaborated 
 infinite times
 
