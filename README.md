@@ -11,7 +11,6 @@ By indentifying the pertaining physical device per file, device specific scan li
 ``hw-cache`` has 5 operation modes: ``scan``, ``update``, ``query``, ``clean`` and ``wipe``.
 Query is the default one, since it's typically wasteful to rescan every time.
 
-File hashsum scan/update:
-``
-*sandro@lab$* hw-cache /data/docs /run/media/MyUSBdrive
-``
+File hashsum scan/update (``-u``):
+
+*sandro@lab$*`` hw-cache /data/docs /run/media/MyUSBdrive``
