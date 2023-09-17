@@ -65,21 +65,22 @@ abused
 Useful points to consider in a data recovery from defective disk (not broken
 file sytem):
 
-- Sometimes typical *All-In-One Recovery Solutions* (AIORS) requires a massive
+- Sometimes typical All-In-One Recovery Solutions (AIORS) require a massive
 surface scan to approach content selection screen
 
 - AIORS doesn't track what has been recovered and what has not within subsequent
 executions (as something goes wrong you'll be forced to restart the program and
 of course its logic will start from scratch too!) and you don't have a pratical
-file list in your hands to check/manage/split
+file list in your hands to surf/edit/split
 
 - AIORS on a unrecoverable read error doesn't have a strategy to track what has
 been successfully red from a file and what has not, chance is only to restart
 from scratch on next execution
 
 - You feel the need to recover with an atomic file-by-file approach and avoid
-losing time by seeing repeatedly on screen titles of what has been completed
-(instead of having a progressively shrinking to-do-list and a growing done-list)
+losing time by seeing repeatedly on screen entries of what has been done
+(indeed, what about having a progressively shrinking to-do-list paired with a
+growing done-list?).
 
 - Having control over composing the recovery list order: some easy list
 splitting/grouping tool organized by categories and last but not least the
@@ -103,8 +104,8 @@ load to our disk).
 directory tree investigation is by a wide margin the most effective and least
 invasive way (no file content peeking as file managers do).
 
-- Once you have noted your master directories to start with, run a scan job
-there to collect the full list of files in one big (and backupped) text file,
+- Once noted your master directories to start with, running a scan job inside
+these to collect the full list of files in one big (and backupped) text file,
 from that moment you realize that you can just view/surf your grabbed list
 instead of dangerously surfing back and forth into the physical device.
 
