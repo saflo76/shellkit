@@ -51,10 +51,10 @@ FRPO is a set of scripts to help for a certain (not so uncommon) data recovery
 scenario, regarding those defective, pre-failure disk drives that still give you
 some sort of (weak or such) file system access.
 In these cases, being impossible to evaluate the device remaining lifespan, the
-logical approach is to make a global file list of everything is intended to
-recover and arrange its order in a compromise fashion between what is more
-strongly wanted and what is supposed to be more likely grabbed because of its
-small footprint.
+logical approach is to make a whole file list of everything is intended to
+recover and arrange its retrieval order in a compromise fashion between what is
+more strongly wanted and what is supposed to be more likely grabbed because of
+its small footprint.
 
 Consider this scenario:
 - Your crucial data just sits on a mere 1-5% of disk space
@@ -65,7 +65,7 @@ abused
 Useful points to consider in a data recovery from defective disk (not broken
 file sytem):
 
-- Sometimes typical *all-in-one recovery software* (AIORS) requires a massive
+- Sometimes typical *All-In-One Recovery Solutions* (AIORS) requires a massive
 surface scan to approach content selection screen
 
 - AIORS doesn't track what has been recovered and what has not within subsequent
@@ -91,7 +91,7 @@ ahead of time closer to the final failure and complete unreadability.
 
 The key points sequence to avoid overloading your defective disk are:
 
-- By mind: take note **Ahead of time** and in **order of importance** of the
+- By mind: take note **ahead of time** and in **order of importance** of the
 real needed directories to scan for content recovery.
 
 - A brief surf by hand: this permits a much more refined directory selection
