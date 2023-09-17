@@ -1,27 +1,27 @@
 # shellkit
 
-Here I will write a brief explanation of a set of scripts that I commonly use in 
-my linux system, two of them maybe considered more like programs (``hw-cache``, 
-``sk-btrfs-send``) as they are a bit sophisticated in the way they get their job 
+Here I will write a brief explanation of a set of scripts that I commonly use in
+my linux system, two of them maybe considered more like programs (``hw-cache``,
+``sk-btrfs-send``) as they are a bit sophisticated in the way they get their job
 done.
 
 ### hw-cache
 
-``hw-cache`` is a file system scanner for mass hashsum collection and management, 
-it creates and keeps updated sort of database-like text files, that are smartly 
-divided per respective block device and as occurrence (sub)splitted into smaller 
-sub-lists when scans are performed into nested directories of already cached 
+``hw-cache`` is a file system scanner for mass hashsum collection and management,
+it creates and keeps updated sort of database-like text files, that are smartly
+divided per respective block device and as occurrence (sub)splitted into smaller
+sub-lists when scans are performed into nested directories of already cached
 content.
 
-Its input can be fed by command line (or ``stdin``) by list of files and/or 
-directories (``-f | -d``) to scan and/or by files containing lists of them (``-F 
-| -D``), then an optimized internal algorithm extracts the most significant path 
-information and by cross filtering it with system mountpoints information fastly 
+Its input can be fed by command line (or ``stdin``) by list of files and/or
+directories (``-f | -d``) to scan and/or by files containing lists of them (``-F
+| -D``), then an optimized internal algorithm extracts the most significant path
+information and by cross filtering it with system mountpoints information fastly
 matches the respective physical device of any file.
 
-By indentifying the pertaining physical device per file, device specific scan 
-lists and master databases (UUID dev tagged) are created/maintained so that any 
-deep directory scan and most importantly any hashsum calculation is done 
+By indentifying the pertaining physical device per file, device specific scan
+lists and master databases (UUID dev tagged) are created/maintained so that any
+deep directory scan and most importantly any hashsum calculation is done
 parallelized at device level.
 
 ``hw-cache`` has 5 operation modes: ``scan``, ``update``, ``query``, ``clean`` 
@@ -29,7 +29,7 @@ and ``wipe``.\
 Query is the default one, since it's typically wasteful to rescan every time.
 
 ##### Examples
-File hashsum scan/update, parallel scan/hash kicks in since paths refers to 
+File hashsum scan/update, parallel scan/hash kicks in since paths refers to
 different block devices:
 
 ``hw-cache -u /data/docs /run/media/MyUSBdrive``
@@ -42,51 +42,71 @@ Scan update, verbosed one line per file, with mixed input:\
 ``-f`` switches file names parsing mode (default is ``-d``)\
 ``-F`` switches files list parsing.
 
-``hw-cache -vvu /data/images -f /data/backup/stuff.tar.gz /vm-pool/win*.img -F 
+``hw-cache -vvu /data/images -f /data/backup/stuff.tar.gz /vm-pool/win*.img -F
 /data/filelist.txt``
 
 ### FRPO (File Recovery Priority Organizer)
 
-FRPO is a set of scripts to help for a common data recovery problem, when you 
-need to get the essential data from those defective, pre-failing 
-disk drives that still give you (a weak or such) file system access and by its 
-behaviour you sense there is no way to perform that long massive surface scan 
-needed by the typical recovery software (for ex. ddrescue, photorec, R-Studio, 
-Ontrack...) as the unit "smells of self-destruction".
+FRPO is a set of scripts to help for a certain (not so uncommon) data recovery
+scenario, regarding those defective, pre-failure disk drives that still give you
+some sort of (weak or such) file system access.
+In these cases, being impossible to evaluate the device remaining lifespan, the
+logical approach is to make a global file list of everything is intended to
+recover and arrange its order in a compromise fashion between what is more
+strongly wanted and what is supposed to be more likely grabbed because of its
+small footprint.
 
-Premise: FRPO approach mostly suits HDDs (rotational disks) as SSDs usually 
-behave quite differently when they face an important degradation or partial 
-failure, however as it dramatically minimizes device load/usage may turn helpful 
-in many different scenarios.
+Consider this scenario:
+- Your crucial data just sits on a mere 1-5% of disk space
+- Even with hiccups you can somewhat access/surf/read the file system
+- Disk gets progressively slower and more jerky, looks prone to die fast if
+abused
 
-So consider the case:
-- your crucial data just takes 1-5% of disk space
-- even with hiccups you can somewhat access/surf file system
-- disk is about to die by the way it behaves
-- would you really perform the typical recovery software full surface scan?
+Useful points to consider in a data recovery from defective disk (not broken
+file sytem):
 
-In these cases what you want/wish is to leverage your disk the less as possible 
-and in the most targeted way, since any single read or write request brings it 
-ahead of time close to the final failure and complete unreadability.
+- Sometimes typical *all-in-one recovery software* (AIORS) requires a massive
+surface scan to approach content selection screen
 
-The key points to avoid overloading your defective disk are:
+- AIORS doesn't track what has been recovered and what has not within subsequent
+executions (as something goes wrong you'll be forced to restart the program and
+of course its logic will start from scratch too!) and you don't have a pratical
+file list in your hands to check/manage/split
 
-- Take note **ahead of time** and in **order of importance** of the real needed
-directories to scan for content recovery
+- AIORS on a unrecoverable read error doesn't have a strategy to track what has
+been successfully red from a file and what has not, chance is only to restart
+from scratch on next execution
 
-- Surf by hand in those ones, command line browsing (``cd <dir>``, ``cd ..``, 
-``ls -latr``, etc...) avoids file content peeking. So if it's the case, this 
-permits a more accurate directory annotation and so refines 1st point above
-- So, with respect of what just said: if the device is somewhat surfable, what 
-do we really need to surf 1st?
-- As being dangerous and unneeded, keep in mind to avoid to repeatedly surf that 
-dirs, do it just 1 time in a profitable definitive way
-- And here how we will do it is: do a scan job starting from 1 or more master 
-dirs to just collect all files path, name, size and date in a 
-precious list file so that can be further examined, splitted, elaborated 
-infinite times
+- You feel the need to recover with an atomic file-by-file approach and avoid
+losing time by seeing repeatedly on screen titles of what has been completed
+(instead of having a progressively shrinking to-do-list and a growing done-list)
 
+- Having control over composing the recovery list order: some easy list
+splitting/grouping tool organized by categories and last but not least the
+ability to edit by hand
 
+As a leitmotiv, what you aim and wish is to leverage your disk the less as
+possible and in the most targeted way, since any single read request brings it
+ahead of time closer to the final failure and complete unreadability.
+
+The key points sequence to avoid overloading your defective disk are:
+
+- By mind: take note **Ahead of time** and in **order of importance** of the
+real needed directories to scan for content recovery.
+
+- A brief surf by hand: this permits a much more refined directory selection
+over previous step, so for the future steps of scanning/reading means skipping a
+lot of unwanted and time consuming content (and much less dangerous/wasteful
+load to our disk).
+
+- Command line browsing (``cd <dir>``, ``cd ..``, ``ls -latr`` ...) for
+directory tree investigation is by a wide margin the most effective and least
+invasive way (no file content peeking as file managers do).
+
+- Once you have noted your master directories to start with, run a scan job
+there to collect the full list of files in one big (and backupped) text file,
+from that moment you realize that you can just view/surf your grabbed list
+instead of dangerously surfing back and forth into the physical device.
 
 
 
