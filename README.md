@@ -117,10 +117,10 @@ destination, just following the input order.
 So what does FRPO:
 
 ``frpo-1metascan`` searches into paths specified as arguments to collect files
-metadata (date/size/pathname) and outputs a FRPO-formatted text. The effective
-way is to run it from on a common base directory and use relative paths in the
-arguments, since later the same relative hierarchy will be mirrored under the
-saving destination.
+metadata (date/size/pathname) and outputs a FRPO-formatted text. The best
+effective way to run it is from a base directory of the source while using
+relative paths in the arguments, since the same relative hierarchy later will be
+mirrored under the recovery dir.
 
 ``frpo-2extats`` doesn't do any mandatory step, it's a simple but very useful
 statistical tool to summarize file list composition grouping them by extension
@@ -142,14 +142,19 @@ During ddr mode, 2 temporary files (image and map) per item are created
 and maintained until job is done, if the script gets interrupted (for ex. by
 user) anyway on next run is able to detect and continue from last ddr state and
 progress.\
-Script takes at least 3 arguments:
-1) Source dir initially used as base for frpo-1metascan scanning process
-2) Destination dir where we want to save recovered files
-3) One or more metadata list files which instructs sequence and name of files to
+Script takes 3 or more arguments:
+- Source dir: initially used as base for frpo-1metascan scanning process
+- Recovery dir: having hierarchy as source, having partial/fully saved files
+- One or more metadata list files which instructs priority and name of files to
 recover
 
-``frpo-4purge``
-
+``frpo-4purge`` is commonly useful to run after a fruitful frpo-3sync execution,
+as it scans the recovery dir, matches the result with each passed list and when
+needed moves out the fully recovered entries in a new *.done* list.
+Now for each list we have an updated one shortened by removal of full recovered
+entries and a new one accounting all these stripped entries.\
+Takes 2 or more arguments, 1st is the recovery dir, from 2nd can be passed any
+metadata lists to be stripped.
 
 
 
