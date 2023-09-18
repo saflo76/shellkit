@@ -120,32 +120,32 @@ So what does FRPO:
 metadata (date/size/pathname) and outputs a FRPO-formatted text. The effective
 way is to run it from on a common base directory and use relative paths in the
 arguments, since later the same relative hierarchy will be mirrored under the
-saving destination.\
+saving destination.
 
 ``frpo-2extats`` doesn't do any mandatory step, it's a simple but very useful
 statistical tool to summarize file list composition grouping them by extension
 and sorting by specific space utilization.
-Just run it passing one or more (FRPO) lists by stdin or arguments.\
+Just run it passing one or more (FRPO) lists by stdin or arguments.
 
 ``frpo-2organize`` takes one or more lists as input and generates a splitted
 output of (up to) 9 list files each one representing a file format category,
 named starting with a number substantially hinting (not forcing) its
-statistical/priority relevance.\
+statistical/priority relevance.
 
 ``frpo-3sync`` finally does the dirty job of files retrieval, one by one, from
 the defective disk. Internally it manages 2 operational modes, by default starts
 using rsync, the moment rsync badly exits (1+ read errors) ddrescue mode kicks
 in. If you already know this solid tool, well here it is called to do at file
 level (and works really well) what 99% of times (I believe) is intended to do
-for whole disks/partitions.\
+for whole disks/partitions.
 During ddr mode, 2 temporary files (image and map) per item are created
 and maintained until job is done, if the script gets interrupted (for ex. by
 user) anyway on next run is able to detect and continue from last ddr state and
 progress.\
 Script takes at least 3 arguments:
-- source dir initially used as base for frpo-1metascan scanning process
-- destination dir where we want to save recovered files
-- one or more metadata list files which instructs sequence and name of files to
+1) Source dir initially used as base for frpo-1metascan scanning process
+2) Destination dir where we want to save recovered files
+3) One or more metadata list files which instructs sequence and name of files to
 recover
 
 ``frpo-4purge``
