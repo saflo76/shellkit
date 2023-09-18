@@ -106,8 +106,51 @@ invasive way (no file content peeking as file managers do).
 
 - Once noted your master directories to start with, running a scan job inside
 these to collect the full list of files in one big (and backupped) text file,
-from that moment you realize that you can just view/surf your grabbed list
-instead of dangerously surfing back and forth into the physical device.
+from that moment you can just view/surf your grabbed list instead of dangerously
+surfing back and forth through the physical mount of the defective disk.
+
+- Being a simple text file, the list can be easily splitted, pruned, reordered
+prioritizing the most wanted files so that we maximize the chance to fully get
+them once we pass this list to a specific script that just save to a safe
+destination, just following the input order.
+
+So what does FRPO:
+
+``frpo-1metascan`` searches into paths specified as arguments for files metadata
+(date/size/pathname) collection and outputs a FRPO-formatted text. The effective
+way is to run it from on a common base directory and use relative paths in the
+arguments, since later the same relative hierarchy will be mirrored under the
+saving destination.\
+
+``frpo-2extats`` doesn't do any mandatory step, it's a simple but very useful
+statistical tool to summarize file list composition grouping them by extension
+and sorting by specific space utilization.
+Just run it passing one or more (FRPO) lists by stdin or arguments.\
+
+``frpo-2organize`` takes one or more lists as input and generates a splitted
+output of (up to) 9 list files each one representing a file format category,
+named starting with a number substantially hinting (not forcing) its
+statistical/priority relevance.\
+
+``frpo-3sync`` finally does the dirty job of files retrieval, one by one, from
+the defective disk. Internally it manages 2 operational modes, by default starts
+using rsync, the moment rsync badly exits (1+ read errors) ddrescue mode kicks
+in. If you already know this solid tool, well here it is called to do at file
+level (and works really well) what 99% of times (I believe) is intended to do
+for whole disks/partitions.\
+During ddr mode, 2 temporary files (image and map) per item are created
+and maintained until job is done, if the script gets interrupted (for ex. by
+user) anyway on next run is able to detect and continue from last ddr state and
+progress.\
+Script takes at least 3 arguments:
+- Source dir initially used as base for frpo-1metascan scanning process
+- Destination dir where we want to save recovered files
+- One or more metadata list files which instructs sequence and name of files to
+recover
+
+``frpo-4purge``
+
+
 
 
 
