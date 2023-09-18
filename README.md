@@ -116,8 +116,8 @@ destination, just following the input order.
 
 So what does FRPO:
 
-``frpo-1metascan`` searches into paths specified as arguments for files metadata
-(date/size/pathname) collection and outputs a FRPO-formatted text. The effective
+``frpo-1metascan`` searches into paths specified as arguments to collect files
+metadata (date/size/pathname) and outputs a FRPO-formatted text. The effective
 way is to run it from on a common base directory and use relative paths in the
 arguments, since later the same relative hierarchy will be mirrored under the
 saving destination.\
@@ -143,9 +143,9 @@ and maintained until job is done, if the script gets interrupted (for ex. by
 user) anyway on next run is able to detect and continue from last ddr state and
 progress.\
 Script takes at least 3 arguments:
-- Source dir initially used as base for frpo-1metascan scanning process
-- Destination dir where we want to save recovered files
-- One or more metadata list files which instructs sequence and name of files to
+- source dir initially used as base for frpo-1metascan scanning process
+- destination dir where we want to save recovered files
+- one or more metadata list files which instructs sequence and name of files to
 recover
 
 ``frpo-4purge``
