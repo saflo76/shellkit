@@ -18,8 +18,8 @@ exit
 }
 
 cmd_name=${0##*/}
-(( $# )) || help
 buf_size=32 # Default buffer size in MiB
+(( $# )) || help
 
 args_par=psfc # Options requiring parameter
 . sk-args-canon
