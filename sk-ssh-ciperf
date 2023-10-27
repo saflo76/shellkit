@@ -1,0 +1,122 @@
+#!/bin/bash
+
+help () {
+cat >&2 <<EOF
+$cmd_name -- SSH client-server cipher performance test
+
+Usage:  $cmd_name [[-OPTION[PARAMETER]]|[--LONGOPTION[=PARAMETER]]] [...] USER@ADDRESS
+
+Options:
+-p --port=TCP       set a custom SSH port
+-s --size=MIB       set transfer buffer size in MiB (default: $buf_size)
+-d --download       download mode (upload is default)
+-f --file=PATH      read file as sample buffer instead of /dev/zero
+-c --ciphers=NAMES  use specific SSH ciphers, comma separated
+-h --help           this help screen
+EOF
+exit
+}
+
+cmd_name=${0##*/}
+(( $# )) || help
+buf_size=32 # Default buffer size in MiB
+
+args_par=psfc # Options requiring parameter
+. sk-args-canon
+while [[ $1 = -* ]]; do
+    case "${1:1}" in
+        p|port=) port=$2; shift ;;
+        # Validate size parameter
+        s|size=) [[ $2 = *[^0-9]* ]] || ! (( $2 )) && {
+            echo "Invalid buffer size set: $2"
+            exit 1
+            }
+            buf_size=$2; shift ;;
+        d|download) download=1 ;;
+        f|file=) buf=$2; shift ;;
+        # Get ciphers arranged in array by changing first the separator
+        c|ciphers=) ciphers=(${2//,/ }); shift ;;
+        h|help) help ;;
+        *) echo "Unknown option '$1'"; exit 1 ;;
+    esac
+    shift
+done
+
+let buf_size*=1048576
+# If no cipher specified detect all available ones
+(( ${#ciphers} )) || ciphers=($(ssh -Q ciphers))
+d=(Up Down)
+echo "${d[$download]}load test"
+
+echo -n 'Connection... '
+# Assign base SSH command line and test remote host reachabiity
+ssh="ssh -q${port+p$port} -S /dev/shm/%C $1"
+$ssh -Mo ControlPersist=2 echo Ok || exit 1
+
+if (( ${#buf} )); then
+    bad_file () { echo "File '$buf' is invalid or non-existent"; exit 1; }
+    size_check () {
+        if (( s )); then
+            # If buffer size is bigger then source file fit to it
+            (( buf_size > s )) && buf_size=$s
+        else
+            echo "File '$buf' is empty"
+            exit 1
+        fi
+    }
+    if (( download )); then
+        # Download mode: buffer file correctness check and size has to be done
+        # at remote side, heredoc trick is to make sure using BASH as shell
+        $ssh bash <<EOF
+        ! [[ -e '$buf' ]] || [[ -d '$buf' ]]
+EOF
+        (( $? )) || bad_file
+        $ssh bash <<EOF
+        [[ -f '$buf' ]]
+EOF
+        (( $? )) || {
+            s=$($ssh stat -c %s -- "'$buf'")
+            size_check
+        }
+    else
+        # Upload mode: buffer file checks are just local
+        ! [[ -e $buf ]] || [[ -d $buf ]] && bad_file
+        [[ -f $buf ]] && {
+            s=$(stat -c %s -- "$buf")
+            size_check
+        }
+    fi
+else
+    buf=/dev/zero
+fi
+
+$ssh -O exit
+echo "Using $(($buf_size/1048576)) MiB sample buffer from '$buf'"
+
+for c in ${ciphers[@]}; do
+    ssh_c="$ssh -c $c"
+    # Pre-run SSH in shared multiplexed connection mode
+    if $ssh_c -Mo ControlPersist=3 :; then
+        # Once running in background SSH test can be done avoiding the start lag
+        t1=$(date +%s%N)
+        if (( download )); then
+            # Download test
+            $ssh_c head -c $buf_size -- "'$buf'" > /dev/null
+        else
+            # Upload test
+            head -c $buf_size -- "$buf" | $ssh_c 'tee > /dev/null'
+        fi
+        t2=$(date +%s%N)
+        # Cut nanosecond accuracy to millisecond
+        t1=${t1:: -6}
+        t2=${t2:: -6}
+        # Calculate transfer rate with a proportion and convert bytes in MiBs
+        rate=$(($buf_size*100000/((t2-t1)*1048576)))
+        n=00
+        (( ${#rate} < 3 )) && rate=${n:${#rate}-1}$rate
+        echo "${rate::-2}.${rate: -2} MiB/s  $c"
+        $ssh_c -O exit
+    else
+        echo "(unsupported)  $c"
+    fi
+done

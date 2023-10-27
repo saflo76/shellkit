@@ -37,20 +37,20 @@ cmd_name=${0##*/}
 
 # Gather supported options list, guess variables names, empty variables when not forbidden (+)
 until [[ $1 = -- ]]; do
-   case $1 in
-      '') echo "Error ($cmd_name): Missing parsing line delimiter '--'" >&2; set --; break ;;
-      -*) echo "Error ($cmd_name): Unknown option '$1'" >&2; set --; break ;;
-      *)
-         i=${1%%[.=]*}
-         if (( ${#i} > 1 )); then
-            i=${i//-/_}
-         else
-            i=_"$i"_
-         fi
-         o+="$i.$1 "
-      ;;
-   esac
-   shift
+    case $1 in
+        '') echo "Error ($cmd_name): Missing parsing line delimiter '--'" >&2; set --; break ;;
+        -*) echo "Error ($cmd_name): Unknown option '$1'" >&2; set --; break ;;
+        *)
+            i=${1%%[.=]*}
+            if (( ${#i} > 1 )); then
+                i=${i//-/_}
+            else
+                i=_"$i"_
+            fi
+            o+="$i.$1 "
+        ;;
+    esac
+    shift
 done
 shift
 
@@ -58,60 +58,59 @@ shift
 # on 1st extraneous option, isolated argument or -- set parsed args number to "parsed_argc" and exit
 declare -i parsed_argc=$#
 while (( $# )); do
-   case $1 in
-      -[^-]*)
-         for (( i=1; i < ${#1}; i++ )); do
-            c=${1:$i:1}
+    case $1 in
+        -[^-]*)
+            for (( i=1; i < ${#1}; i++ )); do
+                c=${1:$i:1}
+                l=${o%.$c[.= ]*}
+                # tricky way to seek in the options template "o" the right one without external tools
+                if [[ $l != $o ]]; then
+                    r=${o#$l}
+                    j=${l##* }${r%% *}
+                    # option type: PARAMETER or FLAG ?
+                    if [[ ${j: -1} = = ]]; then
+                        # assignment and value joint in same argument?
+                        if (( $i < ${#1}-1 )); then
+                            eval ${j%%.*}='${1:$i+1}'
+                        else
+                            eval ${j%%.*}='$2'
+                            shift
+                        fi
+                        break
+                    else
+                        let ${j%%.*}++
+                    fi
+                else
+                    break 2
+                fi
+            done ;;
+        --) shift; break ;;
+        --[^-]*)
+            i=${1:2}
+            # if "=" doesn't match "c" and "i" will be equal
+            c=${i%%=*}
             l=${o%.$c[.= ]*}
-            # tricky way to seek in the options template "o" the right one without external tools
             if [[ $l != $o ]]; then
-               r=${o#$l}
-               j=${l##* }${r%% *}
-               # option type: PARAMETER or FLAG ?
-               if [[ ${j: -1} = = ]]; then
-                  # assignment and value joint in same argument?
-                  if (( $i < ${#1}-1 )); then
-                     eval ${j%%.*}='${1:$i+1}'
-                  else
-                     eval ${j%%.*}='$2'
-                     shift
-                  fi
-                  break
-               else
-                  let ${j%%.*}++
-               fi
+                r=${o#$l}
+                j=${l##* }${r%% *}
+                # option type: PARAMETER or FLAG ?
+                if [[ ${j: -1} = = ]]; then
+                    if [[ $c != $i ]]; then
+                        eval ${j%%.*}='${i#$c=}'
+                    else
+                        eval ${j%%.*}=
+                    fi
+                else
+                    let ${j%%.*}++
+                fi
             else
-               break 2
+                break
             fi
-         done ;;
-      --) shift; break ;;
-      --[^-]*)
-         i=${1:2}
-         # if "=" doesn't match "c" and "i" will be equal
-         c=${i%%=*}
-         l=${o%.$c[.= ]*}
-         if [[ $l != $o ]]; then
-            r=${o#$l}
-            j=${l##* }${r%% *}
-            # option type: PARAMETER or FLAG ?
-            if [[ ${j: -1} = = ]]; then
-               if [[ $c != $i ]]; then
-                  eval ${j%%.*}='${i#$c=}'
-               else
-                  eval ${j%%.*}=
-               fi
-            else
-               let ${j%%.*}++
-            fi
-         else
-            break
-         fi
-      ;;
-      *) break ;;
-   esac
-   shift
+        ;;
+        *) break ;;
+    esac
+    shift
 done
 let parsed_argc-=$#
 
 unset i j c l r o
-

@@ -4,7 +4,7 @@ help () {
 cat >&2 <<EOF
 $cmd_name -- Borg backup archive pruning wrapper
 
-Syntax:  $cmd_name [options] REPO ARCHIVE
+Syntax:  $cmd_name [OPTIONS] REPO ARCHIVE
 
 Wrapper options:
 -n --keep=NUM	Maximum number of archives to keep and rotate
@@ -36,26 +36,26 @@ args_par=ntE
 . sk-args-canon
 
 while [[ $1 = -* ]]; do
-   case "${1:1}" in
-      n|keep=) keep=$2; shift ;;
-      t|time=) time=$(sk-time-to-sec "$2"); shift ;;
-      E|exp=) exp=$2; shift ;;
-      h|help) help ;;
-      p|progress) b_opt+=(-p) ;;
-      list) b_opt+=(--list) ;;
-      s|stats) b_opt+=(-s) ;;
-      *) log_msg "Error: unknown option '$1'"; exit 1 ;;
-   esac
-   shift
+    case "${1:1}" in
+        n|keep=) keep=$2; shift ;;
+        t|time=) time=$(sk-time-to-sec "$2"); shift ;;
+        E|exp=) exp=$2; shift ;;
+        h|help) help ;;
+        p|progress) b_opt+=(-p) ;;
+        list) b_opt+=(--list) ;;
+        s|stats) b_opt+=(-s) ;;
+        *) log_msg "Error: unknown option '$1'"; exit 1 ;;
+    esac
+    shift
 done
 (( $# != 2 )) && {
-   log_msg 'Error: must specify repository and archive prefix'
-   exit 1
+    log_msg 'Error: must specify repository and archive prefix'
+    exit 1
 }
 
 repo=$1
 arch=$2
 rm_list=($(borg list --short -a "$arch-[0-9][0-9][0-9][0-9]*" "$repo" | \
-   keep=$keep time=$time exp=$exp sk-prune-dates))
+    keep=$keep time=$time exp=$exp sk-prune-dates))
 
 (( ${#rm_list[@]} )) && borg delete ${b_opt[@]} "$repo" "${rm_list[@]}"

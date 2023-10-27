@@ -3,6 +3,5 @@
 export TMPDIR=/dev/shm LC_ALL=C
 
 find "$@" \( -type f -o -type d \) -printf '%M\t%m\t%u\t%g\t%U\t%G\n' | \
-   sort -t$'\t' -k5,5n -k6,6n -k2,2n -k1,1 | uniq -c | sed -r 's/^\s+([0-9]+)\s/\1\t/' | \
-   column -ts$'\t' -R1,3,6,7
-
+    sort -t$'\t' -k5,5n -k6,6n -k2,2n -k1,1 | uniq -c | sed -r 's/^\s+([0-9]+)\s/\1\t/' | \
+    column -ts$'\t' -R1,3,6,7

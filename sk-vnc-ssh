@@ -8,21 +8,20 @@ unset ssvnc
 declare -i i=1
 
 while :; do
-   if (( $i > $# )); then
-      echo "Error: missing gateway address"
-      exit 1
-   elif [[ "${@:$i:1}" = *?@?* ]]; then
-      case "${@: -1}" in
-         -)		host=127.0.0.1:$vnc_port ;;	# server loopback : default port
-         :[0-9]*)	host=127.0.0.1${@: -1} ;;	# server loopback : specific port
-         *?:[0-9]*)	host=${@: -1} ;;		# specific server : specific port
-         *)		host=${@: -1}:$vnc_port ;;	# specific server : default port
-      esac
-      ssh=${@:1:$i}
-      ssvnc=("${@:$i+1:$#-$i-1}")
-      ssvncviewer exec="sk-ssh -W $host $ssh" -enc zrle -bgr233 "${ssvnc[@]}"
-      exit
-   fi
-   let i++
+    if (( $i > $# )); then
+        echo "Error: missing gateway address"
+        exit 1
+    elif [[ "${@:$i:1}" = *?@?* ]]; then
+        case "${@: -1}" in
+            -)		host=127.0.0.1:$vnc_port ;;	# server loopback : default port
+            :[0-9]*)	host=127.0.0.1${@: -1} ;;	# server loopback : specific port
+            *?:[0-9]*)	host=${@: -1} ;;		# specific server : specific port
+            *)		host=${@: -1}:$vnc_port ;;	# specific server : default port
+        esac
+        ssh=${@:1:$i}
+        ssvnc=("${@:$i+1:$#-$i-1}")
+        ssvncviewer exec="sk-ssh -W $host $ssh" -enc zrle -bgr233 "${ssvnc[@]}"
+        exit
+    fi
+    let i++
 done
-

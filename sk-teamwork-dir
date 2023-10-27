@@ -10,10 +10,9 @@ u=${1%%:*}
 [[ -n $u ]] && ! id -u "$u" &>/dev/null && error "unknown user '$u'"
 # if user name and arg matches there is no colon for sure
 (( ${#u} == ${#1} )) || {
-   g=${1##*:}
-   [[ -n $g ]] && ! grep -q "^$g:" /etc/group && error "unknown group '$g'"
+    g=${1##*:}
+    [[ -n $g ]] && ! grep -q "^$g:" /etc/group && error "unknown group '$g'"
 }
 
 find "${@:2}" \( -type f -exec chmod +664,+X,-2 '{}' + -o -type d -exec chmod =2775 '{}' + \) \
-   -exec chown "$1" '{}' +
-
+    -exec chown "$1" '{}' +

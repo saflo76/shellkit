@@ -13,25 +13,24 @@
 
 unset args args_i
 while (( $# )); do
-   case "$1" in
-      -[[:alnum:]]*)
-         for (( args_i=1; args_i < ${#1}; args_i++ )); do
-            args+=("-${1:$args_i:1}")
-            if [[ ${1:$args_i:1} = [$args_par] ]]; then
-               # parameter and assignment adjacent without space?
-               if (( args_i < ${#1}-1 )); then
-                  args+=("${1:$args_i+1}")
-               else
-                  args+=("$2")
-                  shift
-               fi
-               break
-            fi
-         done ;;
-      --) break ;;
-      *) args+=("$1") ;;
-   esac
-   shift
+    case "$1" in
+        -[[:alnum:]]*)
+            for (( args_i=1; args_i < ${#1}; args_i++ )); do
+                args+=("-${1:$args_i:1}")
+                if [[ ${1:$args_i:1} = [$args_par] ]]; then
+                    # parameter and assignment adjacent without space?
+                    if (( args_i < ${#1}-1 )); then
+                        args+=("${1:$args_i+1}")
+                    else
+                        args+=("$2")
+                        shift
+                    fi
+                    break
+                fi
+            done ;;
+        --) break ;;
+        *) args+=("$1") ;;
+    esac
+    shift
 done
 set -- "${args[@]}" "$@"
-

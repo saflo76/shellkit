@@ -19,12 +19,12 @@ grep_ext () { grep -Eie '\.('"$1"')$' "${@:2}"; }
 
 # Usage: split_list EXT_FILTER MAIN_LIST NEW_SPECIFIC_LIST
 split_list () {
-   grep_ext "$1" "$2" > $tmp && {
-      mv $tmp "$3"
-      # Each splitting pass will also symmetrically cut the main list
-      grep_ext "$1" -v "$2" > $tmp
-      mv $tmp "$2"
-   }
+    grep_ext "$1" "$2" > $tmp && {
+        mv $tmp "$3"
+        # Each splitting pass will also symmetrically cut the main list
+        grep_ext "$1" -v "$2" > $tmp
+        mv $tmp "$2"
+    }
 }
 
 # File extension regex filters, from statistically most important ones (line-wise) to least ones
@@ -38,15 +38,14 @@ system='bat|chm|cmd|com|cpl|dll|elf|exe|hlp|inf|ini|jar|log|ms[iptu]|ocx|ps1|reg
 diskimg='bin|cue|dmg|hdd|img|iso|md[fsx]|nrg|ov[af]|qcow2?|qed|vbox|vdi|vhdx?|vmdk|vmxf?|wim'
 
 cat -- "$@" > $list
-split_list "$documents" $list 10documents
-split_list "$graphics"  $list 20graphics
-split_list "$images"    $list 30images
-split_list "$archives"  $list 40archives
-split_list "$audio"     $list 50audio
-split_list "$video"     $list 60video
-split_list "$system"    $list 70system
-split_list "$diskimg"   $list 80diskimg
+split_list "$documents" $list 10documents.ls
+split_list "$graphics"  $list 20graphics.ls
+split_list "$images"    $list 30images.ls
+split_list "$archives"  $list 40archives.ls
+split_list "$audio"     $list 50audio.ls
+split_list "$video"     $list 60video.ls
+split_list "$system"    $list 70system.ls
+split_list "$diskimg"   $list 80diskimg.ls
 touch $list
 # Uncategorized stuff left
-mv $list 90stuff
-
+mv $list 90stuff.ls

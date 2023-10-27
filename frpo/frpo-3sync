@@ -3,90 +3,135 @@
 help () {
 cat >&2 <<EOF
 FRPO - File Recovery Priority Organizer
-bad to safe storage file recovery synchronization based on metadata lists
+3-phase file recovery syncing based on metadata lists
 
-Usage:  ${0##*/} [-hqv] SOURCE_BASE_DIR DEST_BASE_DIR METADATA_LIST [...]
+Usage:  ${0##*/} [-12fvqh] SOURCE_BASE_DIR DEST_BASE_DIR METADATA_LIST [...]
 
-Options
+By default recovery starts using rsync mode(0), being fast with simple retries
+to easily skip (purposely) difficult files, if this phase ends with errors
+recovery of incomplete files is restarted using ddrescue tool (mode1/2).
+
+Start recovery mode and phase options:
+-1	ddrescue optimal mode(1): block level copy, good speed
+-2	ddrescue deep mode(2): block level copy, max effort, slow, stressful
+-f	do not switch into deeper modes after phase ending with errors/skips
+
+Other options:
+-v	(rsync) print file transfer progress and speed
+-q	(rsync) quiet operation, print only errors
 -h	print this help screen
--q	quiet operation, print only errors
--v	print file transfer progress and speed
 EOF
 exit
 }
 
+(( $# )) || help
 export LC_ALL=C TMPDIR=/dev/shm
 IFS=$'\n'
-verbose=-i
-[[ $1 = -* ]] && {
-   case "${1:1}" in
-      h) help ;;
-      q) verbose= ;;
-      v) verbose+=P ;;
-      *) echo "Unknown option '$1'"; exit ;;
-   esac
-   shift
-}
-(( $# < 3 )) && help
+mode=0
+verbose=i
 
+. sk-args-canon
+while [[ $1 = -* ]]; do
+    case "${1:1}" in
+        1|2) mode=${1:1} ;;
+        f) f_mode=1 ;;
+        v) verbose=iP ;;
+        q) verbose= ;;
+        h) help ;;
+        *) echo "Error: unknown option '$1'"; exit 1 ;;
+    esac
+    shift
+done
+(( $# < 3 )) && {
+    echo -e 'Error: at least 3 arguments needed\n'
+    exit 1
+}
+
+modes=(rsync ddrescue-optimal ddrescue-deep)
 source=$1
 dest=$2
-ddrescue_cmd () { ddrescue -pb4096 "$@" -- "$source/$f_name" "$r_path"-{img,map}; }
+ddrescue_cmd () {
+    local dir=${f_path%/*}
+    [[ -d "$dir" ]] || mkdir -p -- "$dir"
+    ddrescue -p "$@" -- "$source/$r_path" "$ddr_path"{img,map}
+}
 
-for meta_l in "${@:3}"; do
-   let err_c=0
-   # Read relative path names and copy them one by one
-   while read -r f_name; do
-      r_path=$dest/$f_name.ddr
-      # Detect if have to continue a previous incomplete ddrescue recovery
-      if [[ -f $r_path-img ]]; then
-         ddr=2
-      else
-         # Rsync options:
-         # --append even if desirable is not used as from test results with damaged sources can fake
-         # complete file copy by padding with zeroes or garbage from read errors!
-         # --inplace is better than --partial alone as will overwrite previous copy (attempt), so at worst
-         # the resulting file size will be the same as before.
-         # In the end none of these options have been used as rsync tends to leave invalid copies as valid
-         rsync -Rt $verbose "$source/./$f_name" "$dest"
-         err=$?
-         # Check if rsync fails
-         if (( err )); then
-            # Detect rsync break signal by user and exit after printing stats
-            (( err == 20 )) && exit
-            # Any other error is considered rsync failing, so enable ddrescue mode for this file
-            ddr=1
-            let err_c++
-         else
-            continue
-         fi
-      fi
-      # If here, ddrescue method kicks in, this creates and maintains a map file for each file to
-      # to perform a smart stepwise recovery (can be interrupted/continued anytime), until completion
-      (( ddr == 1 )) && {
-         # As first recovery attempt use a trivial setting to fastly get easily readable parts
-         ddrescue_cmd -n
-         # If ddrescue recovery hasn't finished all parts set for serious mode (ddr=2)
-         ddrescuelog -D "$r_path"-map && ddr=0 || ddr=2
-      }
-      (( ddr == 2 )) && {
-         # 2nd pass uses the tipical and (time) demanding ddrescue setup to recover troublesome areas
-         ddrescue_cmd -dr3
-         ddrescuelog -D "$r_path"-map && ddr=0
-      }
-      if (( ddr )); then
-         let err_c++
-      else
-         mv -- "$r_path"-img "$dest/$f_name"
-         touch -r {"$source","$dest"}/"$f_name"
-         rm -- "$r_path"-map
-      fi
-   done < <(cut -f3 "$meta_l")
-
-   echo -e "\n'$meta_l' done, errors count: $err_c"
-   (( err_c )) && {
-      echo 'Waiting 5sec before proceeding with next list (press CTRL-C if you want to break)'
-      sleep 5 || exit
-   }
+while :; do
+    all_rec_c=0
+    all_skip_c=0
+    all_err_c=0
+    for meta_l in "${@:3}"; do
+        rec_c=0
+        skip_c=0
+        err_c=0
+        # Read relative path names and copy them one by one
+        while read -r r_path; do
+            # Final full destination path
+            f_path=$dest/$r_path
+            [[ -f "$f_path" ]] && continue
+            ddr_path=$f_path.ddr-
+            
+            if (( mode )); then
+                # ddrescue modes create and maintain a map file for each file to perform a smart stepwise
+                # block level recovery that can be interrupted/continued without losing progress
+                if (( mode == 1 )); then
+                    # Mode1 (optimal): good compromise setting to easily get readable parts
+                    ddrescue_cmd -n
+                else
+                    # Mode2 (deep): maximum effort to try to recover troublesome areas
+                    ddrescue_cmd -dr3
+                fi
+                if ddrescuelog -D "$ddr_path"map; then
+                    # ddrescue full recovery done
+                    # Rename image file to original file name, restore date, delete map file
+                    mv -- "$ddr_path"img "$f_path"
+                    touch -r "$source/$r_path" -- "$f_path"
+                    rm -- "$ddr_path"map
+                    let rec_c++
+                else
+                    # Increase error count as ddrescue hasn't recovered all parts yet
+                    let err_c++
+                fi
+            else
+                # Mode0 uses rsync
+                # If the file is found in a (previous) incomplete ddrescue state skip it
+                [[ -f "$ddr_path"img ]] && {
+                    let skip_c++
+                    continue
+                }
+                # Rsync options:
+                # --append even if desirable is not used as from test results with damaged sources
+                # can fake complete file copy by padding with zeroes or garbage from read errors!
+                # --inplace is better than --partial alone as will overwrite previous copy (attempt),
+                # so at worst the resulting file size will be the same as before.
+                # In the end none of these options have been used as rsync tends to leave invalid copies
+                rsync -Rt$verbose "$source/./$r_path" "$dest"
+                # Check rsync exit status
+                case $? in
+                    0) let rec_c++ ;;
+                    # Detect rsync break signal by user and exit after printing stats
+                    20) exit ;;
+                    # Any other error is considered rsync failing, so increase error count
+                    *) let err_c++ ;;
+                esac
+            fi
+        done < <(cut -f3 "$meta_l")
+        
+        let all_rec_c+=rec_c
+        let all_skip_c+=skip_c
+        let all_err_c+=err_c
+        echo -e "\nList '$meta_l' done"\
+            "\nRecovered: $rec_c\n  Skipped: $skip_c\n   Failed: $err_c\n"
+        (( err_c+skip_c )) && {
+            echo 'Waiting 5sec before proceeding with next list (press CTRL-C if you want to break)'
+            sleep 5 || exit
+        }
+    done
+    
+    echo -e "Mode $mode phase done (${modes[$mode]})" \
+        "\nRecovered: $all_rec_c\n  Skipped: $all_skip_c\n   Failed: $all_err_c\n"
+    (( mode > 1 )) || (( f_mode )) || ! (( all_err_c+all_skip_c )) && break
+    sleep 5
+    let mode++
 done
 

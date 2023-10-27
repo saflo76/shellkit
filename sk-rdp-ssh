@@ -6,41 +6,40 @@ RDP tunnelling through SSH
 
 Syntax:  ${0##*/} [-p PORT] USER@SSH_SERVER[:PORT] [xfreerdp options] RDP_SERVER
 EOF
-   exit
+    exit
 }
 
 # Setup SSH client arguments
 while [[ $1 != *?@?* ]]; do
-   (( $# )) || {
-      echo "Error: missing gateway address"
-      exit
-   }
-   ssh_args+=("$1")
-   shift
+    (( $# )) || {
+        echo "Error: missing gateway address"
+        exit
+    }
+    ssh_args+=("$1")
+    shift
 done
 # Remote address can be indicated in compact (addr@user:port) or standard format (-p port addr@user)
 if [[ $1 = *?:[0-9]* ]]; then
-   ssh_args+=("-p${1#*:}" "${1%:*}")
+    ssh_args+=("-p${1#*:}" "${1%:*}")
 else
-   ssh_args+=("$1")
+    ssh_args+=("$1")
 fi
 shift
 
 # Setup RDP client arguments
 rdp_server_p=3389
 case "${@: -1}" in
-   [[:alnum:]]*:[0-9]*)	rdp_server=${@: -1}; i=$#-1;;			# specific server : specific port
-   [[:alnum:]]*)	rdp_server=${@: -1}:$rdp_server_p; i=$#-1;;	# specific server : default port
-   :[0-9]*)		rdp_server=127.0.0.1${@: -1}; i=$#-1;;		# server loopback : specific port
-   *)			rdp_server=127.0.0.1:$rdp_server_p; i=$#;;	# server loopback : default port
+    [[:alnum:]]*:[0-9]*)	rdp_server=${@: -1}; i=$#-1;;			# specific server : specific port
+    [[:alnum:]]*)	rdp_server=${@: -1}:$rdp_server_p; i=$#-1;;	# specific server : default port
+    :[0-9]*)		rdp_server=127.0.0.1${@: -1}; i=$#-1;;		# server loopback : specific port
+    *)			rdp_server=127.0.0.1:$rdp_server_p; i=$#;;	# server loopback : default port
 esac
 
 gw_name=$(sk-ssh "${ssh_args[@]}" "echo \$HOSTNAME") && \
 rdp_client_p=$(python -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()') && \
 sk-ssh -fL localhost:$rdp_client_p:$rdp_server "${ssh_args[@]}" "sleep 3" && \
 xfreerdp \
-   +z /cert-ignore -encryption \
-   +fonts -aero -window-drag -menu-anims -themes -wallpaper \
-   /bpp:16 /size:1280x960 "${@:1:$i}" /v:127.0.0.1:$rdp_client_p \
-   /t:"${ssh_args[@]: -1}  ($gw_name)  -  ${rdp_server%:$rdp_server_p}"
-
+    +z /cert-ignore -encryption \
+    +fonts -aero -window-drag -menu-anims -themes -wallpaper \
+    /bpp:16 /size:1280x960 "${@:1:$i}" /v:127.0.0.1:$rdp_client_p \
+    /t:"${ssh_args[@]: -1}  ($gw_name)  -  ${rdp_server%:$rdp_server_p}"

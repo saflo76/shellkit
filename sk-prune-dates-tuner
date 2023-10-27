@@ -6,13 +6,13 @@ cmd_name=${0##*/}
 args_par=ntE
 . sk-args-canon
 while (( $# )); do
-   case "$1" in
-      -n|-keep=) shift; keep=$1 ;;
-      -t|-time=) shift; time=$(sk-time-to-sec $1) ;;
-      -E|-exp=) shift; exp=$1 ;;
-      *) echo "Error: unknown option '$1'"; exit ;;
-   esac
-   shift
+    case "$1" in
+        -n|-keep=) shift; keep=$1 ;;
+        -t|-time=) shift; time=$(sk-time-to-sec $1) ;;
+        -E|-exp=) shift; exp=$1 ;;
+        *) echo "Error: unknown option '$1'"; exit ;;
+    esac
+    shift
 done
 
 (( keep && time )) || {
@@ -36,46 +36,45 @@ exit
 }
 
 declare -i linear=$((exp==1)) snap i j year=31557600 month=2629800 day=86400 hour=3600 minute=60 \
-   block=$((time/($(tput cols)-16))) bar
+    block=$((time/($(tput cols)-16))) bar
 let time*=1000000
 split=$((time/(keep-linear)**exp+1))
 
 echo "Pruning constraints (older to latter):"
 while (( keep > 1 )); do
-   snap=$((split*(keep-linear)**exp))/1000000
-   bar=snap/block
-   j=0 # To limit unnecessary verbosity for accuracy
-   printf "n° $keep\t"
-   i=snap/year
-   (( i )) && {
-      printf "$i"Y
-      let snap%=year j++
-   }
-   i=snap/month
-   (( i )) && {
-      (( j )) && printf " "
-      printf "$i"M
-      let snap%=month j++
-   }
-   i=snap/day
-   (( i && j < 2 )) && {
-      (( j )) && printf " "
-      printf "$i"d
-      let snap%=day j++
-   }
-   i=snap/hour
-   (( i && j < 2 )) && {
-      (( j )) && printf " "
-      printf "$i"h
-      let snap%=hour j++
-   }
-   i=snap/minute
-   (( i && j < 2 )) && {
-      (( j )) && printf " "
-      printf "$i"m
-   }
-   printf \\t; head -c$bar /dev/zero | tr \\0 \|; echo
-   let keep--
+    snap=$((split*(keep-linear)**exp))/1000000
+    bar=snap/block
+    j=0 # To limit unnecessary verbosity for accuracy
+    printf "n° $keep\t"
+    i=snap/year
+    (( i )) && {
+        printf "$i"Y
+        let snap%=year j++
+    }
+    i=snap/month
+    (( i )) && {
+        (( j )) && printf " "
+        printf "$i"M
+        let snap%=month j++
+    }
+    i=snap/day
+    (( i && j < 2 )) && {
+        (( j )) && printf " "
+        printf "$i"d
+        let snap%=day j++
+    }
+    i=snap/hour
+    (( i && j < 2 )) && {
+        (( j )) && printf " "
+        printf "$i"h
+        let snap%=hour j++
+    }
+    i=snap/minute
+    (( i && j < 2 )) && {
+        (( j )) && printf " "
+        printf "$i"m
+    }
+    printf \\t; head -c$bar /dev/zero | tr \\0 \|; echo
+    let keep--
 done
 echo "n° 1    0 (now)"
-

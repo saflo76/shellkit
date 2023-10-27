@@ -37,8 +37,8 @@ IFS=$'\n'
 put_log_str () { echo -e $(date +%Y%m%d-%H%M.%S)" -- $cmd_name -- $@"; }
 
 (( $(id -u) )) && {
-   put_log_str "Error: must be root"
-   exit 1
+    put_log_str "Error: must be root"
+    exit 1
 }
 
 date_mask="-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]"
@@ -47,93 +47,92 @@ args_par=ntEoc
 . sk-args-canon
 
 unlock_dir () {
-   [[ -n $dir_lock ]] && exec {dir_lock}>&-
+    [[ -n $dir_lock ]] && exec {dir_lock}>&-
 }
 snap_dir_setup () {
-   [[ $snap_dir != $last_snap_dir ]] && {
-      unlock_dir
-      # lock for file system race condition
-      a=${snap_dir%/}
-      exec {dir_lock}> /run/lock/fs_dir${a//\//_}
-      flock $dir_lock
-      # As exclusive access may be blocking, sync date after (every) lock
-      date=-$(date +%Y%m%d-%H%M)
-      last_snap_dir=$snap_dir
-   }
+    [[ $snap_dir != $last_snap_dir ]] && {
+        unlock_dir
+        # lock for file system race condition
+        a=${snap_dir%/}
+        exec {dir_lock}> /run/lock/fs_dir${a//\//_}
+        flock $dir_lock
+        # As exclusive access may be blocking, sync date after (every) lock
+        date=-$(date +%Y%m%d-%H%M)
+        last_snap_dir=$snap_dir
+    }
 }
 
 while :; do
-   (( stop_opt )) || {
-      while [[ $1 = -* ]]; do
-         case "${1:1}" in
-            n|keep=) keep=$2; shift ;;
-            t|time=) time=$(sk-time-to-sec "$2"); shift ;;
-            E|exp=) exp=$2; shift ;;
-            o|output=)
-               output=$2; shift
-               [[ -n $output ]] && {
-                  snap_dir=$(readlink -ne "$output") && [[ -d $snap_dir ]] || {
-                     put_log_str "Error: invalid output directory '$output'"
-                     exit 1
-                  }
-                  [[ $snap_dir = / ]] || snap_dir+=/
-                  snap_dir_setup
-               } ;;
-            c|chdir=) cd "$2" || exit; shift ;;
-            P|prune) prune=1 ;;
-            -) stop_opt=1; shift; break ;;
-            *) put_log_str "Error: unknown option '$1'"; exit 1 ;;
-         esac
-         shift
-      done
-   }
-   (( $# )) || break
-   if (( prune )); then
-      # PRUNE mode
-      if [[ -n $output ]]; then
-         # Subvol directory not significant in common output mode, remove possible slash(es) at end
-         a=${1##*[^/]}
-         subvol=${1%$a}
-      else
-         # Snapshots directory significant as work dir, sanitize by partial canonicalization
-         subvol=$(readlink -nf "$1")
-      fi
-   else
-      # SNAPSHOT+PRUNE mode: sanitize full path name by canonicalizing reference
-      subvol=$(readlink -ne "$1")
-   fi
-   if [[ -n $subvol ]]; then
-      [[ -z $output ]] && {
-         # If not using a common output dir work under each respective subvolume dir
-         snap_dir=${subvol%/*}/
-         snap_dir_setup
-      }
-      subvol_name=${subvol##*/}
-      (( prune )) || {
-         snap_name=$subvol_name$date
-         a=("$snap_dir$snap_name"*)
-         if [[ -z $a ]]; then
-            btrfs subvolume snapshot -r "$1" "$snap_dir$snap_name"
-         else
-            put_log_str "SKIPPED: '$snap_name' is already up to date"
-         fi
-      }
-      (( keep || time )) && (
-         cd "$snap_dir" || exit
-         snap_name_len=${#subvol_name}+$date_mask_len
-         # Joining also tagged snapshots in list enhances prune pattern evaluation
-         # as the algorithm it's not forced to prune some regular ones when they fit the pattern
-         a=("$subvol_name"$date_mask*)
-         b=($(time=$time keep=$keep exp=$exp sk-prune-dates <<< "${a[*]}" | \
-            cut -c-$snap_name_len | uniq))
-         # If prune list has any tagged snapshot it will be discarded before deletion
-         b=($(sort <<< "${a[*]}"$'\n'"${b[*]}" | uniq -d))
-         [[ -n $b ]] && btrfs subvolume delete "${b[@]}"
-      )
-   else
-      put_log_str "Error: invalid specified subvolume '$1'"
-   fi
-   shift
+    (( stop_opt )) || {
+        while [[ $1 = -* ]]; do
+            case "${1:1}" in
+                n|keep=) keep=$2; shift ;;
+                t|time=) time=$(sk-time-to-sec "$2"); shift ;;
+                E|exp=) exp=$2; shift ;;
+                o|output=)
+                    output=$2; shift
+                    [[ -n $output ]] && {
+                        snap_dir=$(readlink -ne "$output") && [[ -d $snap_dir ]] || {
+                            put_log_str "Error: invalid output directory '$output'"
+                            exit 1
+                        }
+                        [[ $snap_dir = / ]] || snap_dir+=/
+                        snap_dir_setup
+                    } ;;
+                c|chdir=) cd "$2" || exit; shift ;;
+                P|prune) prune=1 ;;
+                -) stop_opt=1; shift; break ;;
+                *) put_log_str "Error: unknown option '$1'"; exit 1 ;;
+            esac
+            shift
+        done
+    }
+    (( $# )) || break
+    if (( prune )); then
+        # PRUNE mode
+        if [[ -n $output ]]; then
+            # Subvol directory not significant in common output mode, remove possible slash(es) at end
+            a=${1##*[^/]}
+            subvol=${1%$a}
+        else
+            # Snapshots directory significant as work dir, sanitize by partial canonicalization
+            subvol=$(readlink -nf "$1")
+        fi
+    else
+        # SNAPSHOT+PRUNE mode: sanitize full path name by canonicalizing reference
+        subvol=$(readlink -ne "$1")
+    fi
+    if [[ -n $subvol ]]; then
+        [[ -z $output ]] && {
+            # If not using a common output dir work under each respective subvolume dir
+            snap_dir=${subvol%/*}/
+            snap_dir_setup
+        }
+        subvol_name=${subvol##*/}
+        (( prune )) || {
+            snap_name=$subvol_name$date
+            a=("$snap_dir$snap_name"*)
+            if [[ -z $a ]]; then
+                btrfs subvolume snapshot -r "$1" "$snap_dir$snap_name"
+            else
+                put_log_str "SKIPPED: '$snap_name' is already up to date"
+            fi
+        }
+        (( keep || time )) && (
+            cd "$snap_dir" || exit
+            snap_name_len=${#subvol_name}+$date_mask_len
+            # Joining also tagged snapshots in list enhances prune pattern evaluation
+            # as the algorithm it's not forced to prune some regular ones when they fit the pattern
+            a=("$subvol_name"$date_mask*)
+            b=($(time=$time keep=$keep exp=$exp sk-prune-dates <<< "${a[*]}" | \
+                cut -c-$snap_name_len | uniq))
+            # If prune list has any tagged snapshot it will be discarded before deletion
+            b=($(sort <<< "${a[*]}"$'\n'"${b[*]}" | uniq -d))
+            [[ -n $b ]] && btrfs subvolume delete "${b[@]}"
+        )
+    else
+        put_log_str "Error: invalid specified subvolume '$1'"
+    fi
+    shift
 done
 unlock_dir
-

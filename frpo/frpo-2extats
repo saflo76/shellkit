@@ -13,11 +13,11 @@ exit
 export LC_ALL=C TMPDIR=/dev/shm
 unset tmps
 new_tmp () {
-   while (( $# )); do
-      tmps+=($(mktemp)) || exit
-      eval $1=${tmps[-1]}
-      shift
-   done
+    while (( $# )); do
+        tmps+=($(mktemp)) || exit
+        eval $1=${tmps[-1]}
+        shift
+    done
 }
 trap 'rm -f -- ${tmps[@]}' EXIT
 new_tmp list exts tmp1 tmp2
@@ -26,24 +26,23 @@ cut -f2- -- "$@" > $list
 grep -o '\.[[:alnum:]_-]\+$' $list | cut -c2- | uniq | tr '[:upper:]' '[:lower:]' | sort -uo $exts
 
 put_line () {
-   c=$(wc -l $tmp1)
-   c=${c%%[^0-9]*}
-   du=$(cut -f1 $tmp1 | awk '{s+=$1} END {print s}')
-   printf '%s\t%s\t%s\n' $c $du "$ext" >> $tmp2
+    c=$(wc -l $tmp1)
+    c=${c%%[^0-9]*}
+    du=$(cut -f1 $tmp1 | awk '{s+=$1} END {print s}')
+    printf '%s\t%s\t%s\n' $c $du "$ext" >> $tmp2
 }
 while read -r ext; do
-   grep -i "\.$ext$" $list > $tmp1
-   put_line
-   grep -iv "\.$ext$" $list > $tmp1
-   mv $tmp1 $list
+    grep -i "\.$ext$" $list > $tmp1
+    put_line
+    grep -iv "\.$ext$" $list > $tmp1
+    mv $tmp1 $list
 done < $exts
 [[ -s $list ]] && {
-   mv $list $tmp1
-   ext='(no extension)'
-   put_line
+    mv $list $tmp1
+    ext='(no extension)'
+    put_line
 }
 
 sort -nr -t$'\t' -k2,2 -o $tmp1 $tmp2
 printf 'Count\tDisk space\tExtension\n-----\t----------\t---------\n' > $tmp2
 column -ts$'\t' -R1,2 $tmp2 $tmp1
-

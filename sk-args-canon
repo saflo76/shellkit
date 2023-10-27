@@ -16,29 +16,28 @@
 
 unset args args_i args_a
 while (( $# )); do
-   case "$1" in
-      -[[:alnum:]]*)
-         for (( args_i=1; args_i < ${#1}; args_i++ )); do
-            args+=("-${1:$args_i:1}")
-            if [[ ${1:$args_i:1} = [$args_par] ]]; then
-               # parameter and assignment adjacent without space?
-               if (( args_i < ${#1}-1 )); then
-                  args+=("${1:$args_i+1}")
-               else
-                  args+=("$2")
-                  shift
-               fi
-               break
-            fi
-         done ;;
-      --[[:alnum:]]*=*)
-         args_a="${1:1}"
-         args+=("${args_a%%=*}=" "${args_a#*=}") ;;
-      --[[:alnum:]]*) args+=("${1:1}") ;;
-      --) break ;;
-      *) args+=("$1") ;;
-   esac
-   shift
+    case "$1" in
+        -[[:alnum:]]*)
+            for (( args_i=1; args_i < ${#1}; args_i++ )); do
+                args+=("-${1:$args_i:1}")
+                if [[ ${1:$args_i:1} = [$args_par] ]]; then
+                    # parameter and assignment adjacent without space?
+                    if (( args_i < ${#1}-1 )); then
+                        args+=("${1:$args_i+1}")
+                    else
+                        args+=("$2")
+                        shift
+                    fi
+                    break
+                fi
+            done ;;
+        --[[:alnum:]]*=*)
+            args_a="${1:1}"
+            args+=("${args_a%%=*}=" "${args_a#*=}") ;;
+        --[[:alnum:]]*) args+=("${1:1}") ;;
+        --) break ;;
+        *) args+=("$1") ;;
+    esac
+    shift
 done
 set -- "${args[@]}" "$@"
-

@@ -54,77 +54,76 @@ declare -i last=${#dates_list[@]} i=0 j time keep exp
 : ${keep=0} ${time=0}
 
 if (( time > 0 )); then
-   trap 'rm -f -- $file' EXIT
-   file=$(mktemp)
-   # Exponential time line retention pattern
-   : ${exp=3}
-   # date parsing so that output will be 'YYYYDDMM hhmm'
-   : ${filter='s/^.*([0-9]{4})[^0-9]?([01][0-9])[^0-9]?([0-3][0-9])[^0-9]?([0-2][0-9])[^0-9]?([0-5][0-9]).*$/\1\2\3 \4\5/'}
-   # Get dates from stdin and convert in microseconds (for accuracy in e^E fractions)
-   sed -r "$filter" <<< "${dates_list[*]}" > $file
-   declare -i time=time*1000000 split linear=$(( exp == 1 )) times_list=($(date -f $file +%s000000))
-   let last--
-   
-   if (( k )); then
-      # List dates to KEEP
-      if (( keep > 1 )); then
-         # In linear mode (-E1) split multiplier range is [1 .. keep-1], with exponential is [2 .. keep]
-         # +1 avoids a rounding down issue that would cut dates still inside limit set, this specially
-         # arises in linear mode with nicely aligned patterns for ex.: keep=31 time=30d
-         split=$((time/(keep-linear)**exp+1))
-         while :; do
-            # Scan and pick first (oldest) date inside current zone
-            while j=times_list[last]-times_list[i] && (( j > time )); do let i++; done
-            (( i >= last )) && break
-            printf %s\\n "${dates_list[$i]}"
-            let i++
-            # Scan for the next zone (keep) outside picked date (j), to limit picking one date per zone
-            while (( j <= time )); do
-               let keep--
-               (( keep < 2 )) && break 2
-               time=$((split*(keep-linear)**exp))
+    trap 'rm -f -- $file' EXIT
+    file=$(mktemp)
+    # Exponential time line retention pattern
+    : ${exp=3}
+    # date parsing so that output will be 'YYYYDDMM hhmm'
+    : ${filter='s/^.*([0-9]{4})[^0-9]?([01][0-9])[^0-9]?([0-3][0-9])[^0-9]?([0-2][0-9])[^0-9]?([0-5][0-9]).*$/\1\2\3 \4\5/'}
+    # Get dates from stdin and convert in microseconds (for accuracy in e^E fractions)
+    sed -r "$filter" <<< "${dates_list[*]}" > $file
+    declare -i time=time*1000000 split linear=$(( exp == 1 )) times_list=($(date -f $file +%s000000))
+    let last--
+    
+    if (( k )); then
+        # List dates to KEEP
+        if (( keep > 1 )); then
+            # In linear mode (-E1) split multiplier range is [1 .. keep-1], with exponential is [2 .. keep]
+            # +1 avoids a rounding down issue that would cut dates still inside limit set, this specially
+            # arises in linear mode with nicely aligned patterns for ex.: keep=31 time=30d
+            split=$((time/(keep-linear)**exp+1))
+            while :; do
+                # Scan and pick first (oldest) date inside current zone
+                while j=times_list[last]-times_list[i] && (( j > time )); do let i++; done
+                (( i >= last )) && break
+                printf %s\\n "${dates_list[$i]}"
+                let i++
+                # Scan for the next zone (keep) outside picked date (j), to limit picking one date per zone
+                while (( j <= time )); do
+                    let keep--
+                    (( keep < 2 )) && break 2
+                    time=$((split*(keep-linear)**exp))
+                done
             done
-         done
-      elif (( keep < 1 )); then
-         # When "keep" is not meaningful or not set, just apply a cutoff after "time" limit
-         time=times_list[last]-time
-         for (( last=0; times_list[last] < time; last++ )); do :; done
-      fi
-      printf %s\\n "${dates_list[@]:$last}"
-   else
-      # List dates to PRUNE
-      if (( keep > 1 )); then
-         split=$((time/(keep-linear)**exp+1))
-         while :; do
-            while j=times_list[last]-times_list[i] && (( j > time )); do
-               printf %s\\n "${dates_list[$i]}"
-               let i++
+        elif (( keep < 1 )); then
+            # When "keep" is not meaningful or not set, just apply a cutoff after "time" limit
+            time=times_list[last]-time
+            for (( last=0; times_list[last] < time; last++ )); do :; done
+        fi
+        printf %s\\n "${dates_list[@]:$last}"
+    else
+        # List dates to PRUNE
+        if (( keep > 1 )); then
+            split=$((time/(keep-linear)**exp+1))
+            while :; do
+                while j=times_list[last]-times_list[i] && (( j > time )); do
+                    printf %s\\n "${dates_list[$i]}"
+                    let i++
+                done
+                (( i >= last )) && break
+                let i++
+                while (( j <= time )); do
+                    let keep--
+                    (( keep < 2 )) && break 2
+                    time=$((split*(keep-linear)**exp))
+                done
             done
-            (( i >= last )) && break
-            let i++
-            while (( j <= time )); do
-               let keep--
-               (( keep < 2 )) && break 2
-               time=$((split*(keep-linear)**exp))
-            done
-         done
-         let last-=i
-      elif (( keep < 1 )); then
-         # When "keep" is not meaningful or not set, just apply a cutoff after "time" limit
-         time=times_list[last]-time
-         for (( last=0; times_list[last] < time; last++ )); do :; done
-      fi
-      # Avoid printing empty line
-      (( last )) && printf %s\\n "${dates_list[@]:$i:$last}"
-   fi
+            let last-=i
+        elif (( keep < 1 )); then
+            # When "keep" is not meaningful or not set, just apply a cutoff after "time" limit
+            time=times_list[last]-time
+            for (( last=0; times_list[last] < time; last++ )); do :; done
+        fi
+        # Avoid printing empty line
+        (( last )) && printf %s\\n "${dates_list[@]:$i:$last}"
+    fi
 else
-   # When "time" is not meaningful or not set, just apply a cutoff after "keep" number limit
-   (( keep > last )) && keep=last
-   if (( k )); then
-      (( keep )) && printf %s\\n "${dates_list[@]: -$keep}"
-   else
-      let last-=keep
-      (( last )) && printf %s\\n "${dates_list[@]:0:$last}"
-   fi
+    # When "time" is not meaningful or not set, just apply a cutoff after "keep" number limit
+    (( keep > last )) && keep=last
+    if (( k )); then
+        (( keep )) && printf %s\\n "${dates_list[@]: -$keep}"
+    else
+        let last-=keep
+        (( last )) && printf %s\\n "${dates_list[@]:0:$last}"
+    fi
 fi
-

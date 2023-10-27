@@ -1,4 +1,3 @@
 #!/bin/bash
 
-ssh -o ControlMaster=auto -o ControlPersist=60 -S /dev/shm/%r@%h:%p "$@"
-
+ssh -MS /dev/shm/%C -o ControlPersist=20 "$@"
