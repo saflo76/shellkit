@@ -143,17 +143,18 @@ During ddr mode, 2 temporary files (image and map) per entry are created
 and maintained until its job is done, if the script gets interrupted (for ex. by
 user) the progress is never lost and on next run can be continued.\
 Script takes at least 3 arguments:
-- Source dir: that one initially used as base for frpo-1metascan scanning process
+- Source dir: that one initially used as base for ``frpo-1metascan`` scanning
+process
 - Recovery dir: destination to host recovered source content, having same
 hierarchy and holding partial/fully recovered files
-- One or more metadata lists that internally instructs which files to recover (relative
-path) and the priority implicitly by the mere line order
+- One or more metadata lists that internally instructs which files to recover
+(relative path) and the priority implicitly by the mere line order
 
-``frpo-4purge`` is commonly useful to run after a fruitful frpo-3sync execution,
-as it scans the recovery dir, matches the result with each passed list and when
-needed moves out the fully recovered entries in a new ``.done`` list.
-Now for each list we have an updated one shortened by removal of full recovered
-entries and a new one storing all these stripped entries.\
+``frpo-4purge`` is commonly useful to run after a fruitful ``frpo-3sync``
+execution, as it scans the recovery dir, matches the result with each passed
+list and when needed moves out the fully recovered entries in a new ``.done``
+list. Now for each list we have an updated one shortened by removal of full
+recovered entries and a new one storing all these stripped entries.\
 Takes 2 or more arguments, 1st is the recovery dir, from 2nd can be passed any
 metadata lists to be stripped.
 
@@ -202,8 +203,7 @@ drwxrwx--- 1 sandro root      0  4 set  2020  Searches
 drwxrwx--- 1 sandro root      0  4 set  2020  Videos
 ```
 We know that typical user stuff gets stored into these dirs:
-``Desktop``, ``Documents``, ``Pictures``, ``Music``, ``Videos`` and
-``Downloads``.\
+``Desktop``, ``Documents``, ``Pictures``, ``Music`` and ``Videos``.\
 We can surf inside to do a more refined view and know better what exactly pick
 and what not, but to do something effective we would need to run for ex. a space
 utilization query command (``du -sh``) among some dirs and this could easily
@@ -217,7 +217,7 @@ semi-assisted way so that what counts the most is being put in advance to be
 grabbed as soon as possible.\
 So let's start the metadata scan:
 
-``$ frpo-1metascan Desktop Documents Pictures Music Videos Downloads >
+``$ frpo-1metascan Desktop Documents Pictures Music Videos >
 /safe/recovery/main.ls``
 
 After minutes of clicking noise and hiccups coming from the HDD finally we have
