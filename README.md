@@ -166,8 +166,8 @@ the partition where we have the data to recover:
 $ sudo mkdir /mnt/prefail
 $ sudo mount /dev/sdz1 /mnt/prefail -o ro,uid=1000,fmask=117,dmask=7,noatime
 ```
-We know that the files to recover are under the ``user`` dir, checking first in
-the ``Users`` dir to be sure that there no other users other than "user"
+We know that the files to recover are under the ``user`` dir, checking the
+``Users`` dir to be sure that there are no other ones to include
 ```
 $ cd /mnt/prefail/Users
 $ ls -la
@@ -201,9 +201,9 @@ drwxrwx--- 1 sandro root      0  4 set  2020 'Saved Games'
 drwxrwx--- 1 sandro root      0  4 set  2020  Searches
 drwxrwx--- 1 sandro root      0  4 set  2020  Videos
 ```
-We know typical user stuff gets stored into there dirs:
+We know that typical user stuff gets stored into these dirs:
 ``Desktop``, ``Documents``, ``Pictures``, ``Music``, ``Videos`` and
-``Downloads``
+``Downloads``.\
 We can surf inside to do a more refined view and know better what exactly pick
 and what not, but to do something effective we would need to run for ex. a space
 utilization query command (``du -sh``) among some dirs and this could easily
