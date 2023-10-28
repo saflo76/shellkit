@@ -151,7 +151,7 @@ path) and the priority implicitly by the mere line order
 
 ``frpo-4purge`` is commonly useful to run after a fruitful frpo-3sync execution,
 as it scans the recovery dir, matches the result with each passed list and when
-needed moves out the fully recovered entries in a new *.done* list.
+needed moves out the fully recovered entries in a new ``.done`` list.
 Now for each list we have an updated one shortened by removal of full recovered
 entries and a new one storing all these stripped entries.\
 Takes 2 or more arguments, 1st is the recovery dir, from 2nd can be passed any
@@ -161,7 +161,7 @@ metadata lists to be stripped.
 
 Let's build from scratch an example for a FRPO application, taking an
 hypothetical defective HDD coming from a Windows machine, let's mount read-only
-the partition where we have the data to recover:\
+the partition where we have the data to recover:
 ```
 $ sudo mkdir /mnt/prefail
 $ sudo mount /dev/sdz1 /mnt/prefail -o ro,uid=1000,fmask=117,dmask=7,noatime
@@ -171,6 +171,7 @@ the ``Users`` dir to be sure that there no other users other than "user"
 ```
 $ cd /mnt/prefail/Users
 $ ls -la
+
 drwxrwx--- 1 sandro root  4096  4 set  2020  .
 drwxrwx--- 1 sandro root 12288  5 set  2020  ..
 lrwxrwxrwx 2 sandro root    19 14 lug  2009 'All Users' -> /mnt/prefail/ProgramData
@@ -182,6 +183,7 @@ drwxrwx--- 1 sandro root  8192  4 set  2020  user
 
 $ cd user
 $ ls -la
+
 drwxrwx--- 1 sandro root   8192  4 set  2020  .
 drwxrwx--- 1 sandro root   4096  4 set  2020  ..
 drwxrwx--- 1 sandro root      0  4 set  2020  AppData
@@ -203,19 +205,25 @@ We know typical user stuff gets stored into there dirs:
 ``Desktop``, ``Documents``, ``Pictures``, ``Music``, ``Videos`` and
 ``Downloads``
 We can surf inside to do a more refined view and know better what exactly pick
-and what not, but to do something substantial we should use for ex. a space
-utilization query command (``du -sh``) among some dirs and this would be way too
-demanding and dangerous for a disk in prefailure.\
-Anyway the FRPO scripts are made to follow a fair file-type level priority
-principle so let's start the 1st metadata scan:
+and what not, but to do something effective we would need to run for ex. a space
+utilization query command (``du -sh``) among some dirs and this could easily
+result in a quite demanding and wasteful process for (the health of) our disk,
+given the fact that we still have to perform the **mandatory file scan** job to
+build the list of files to recover.\
+Anyway FRPO is made with the idea of getting the list for first and offloading
+the defective disk from repeated surfing by focusing work into list filtering,
+splitting and rearranging (user can manually edit and sort entries inside) in a
+semi-assisted way so that what counts the most is being put in advance to be
+grabbed as soon as possible.\
+So let's start the metadata scan:
 
 ``$ frpo-1metascan Desktop Documents Pictures Music Videos Downloads >
 /safe/recovery/main.ls``
 
 After minutes of clicking noise and hiccups coming from the HDD finally we have
 our main file list inside the main recovery dir ``/safe/recovery``, now by
-running this script command line we can also have a sort of summary of the
-composition of files to recover
+running this command line we can also produce a sort of summary of the
+composition of files to recover:
 ```
 $ cd /safe/recovery
 $ frpo-2extats main.ls
