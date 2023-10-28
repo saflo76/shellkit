@@ -124,7 +124,7 @@ mirrored under the recovery dir.
 
 ``frpo-2extats`` doesn't do any mandatory step, it's a simple but very useful
 statistical tool to summarize file list composition grouping them by extension
-and sorting by specific space utilization.
+and sorting by space utilization.
 Just run it passing one or more (FRPO) lists by stdin or arguments.
 
 ``frpo-2organize`` takes one or more lists as input and generates a splitted
@@ -133,49 +133,135 @@ named starting with a number substantially hinting (not forcing) its
 statistical/priority relevance.
 
 ``frpo-3sync`` finally does the dirty job of files retrieval, one by one, from
-the defective disk. Internally it manages 2 operational modes, by default starts
-using rsync, the moment rsync badly exits (1+ read errors) ddrescue mode kicks
-in. If you already know this solid tool, well here it is called to do at file
-level (and works really well) what 99% of times (I believe) is intended to do
-for whole disks/partitions.
-During ddr mode, 2 temporary files (image and map) per item are created
-and maintained until job is done, if the script gets interrupted (for ex. by
-user) anyway on next run is able to detect and continue from last ddr state and
-progress.\
-Script takes 3 or more arguments:
-- Source dir: initially used as base for frpo-1metascan scanning process
-- Recovery dir: having hierarchy as source, having partial/fully saved files
-- One or more metadata list files which instructs priority and name of files to
-recover
+the defective disk. Internally it manages 3 operational modes/phases (0..2), by
+default starts using rsync, if this phase ends with some errors/fails then the
+subsequent phase, using ddrescue, kicks in to retry recovery of missing files.
+If you already know this solid tool, well here it's called to do at file level
+that kind of work that in the 99% of times is intended to be done for entire
+disks/partitions.
+During ddr mode, 2 temporary files (image and map) per entry are created
+and maintained until its job is done, if the script gets interrupted (for ex. by
+user) the progress is never lost and on next run can be continued.\
+Script takes at least 3 arguments:
+- Source dir: that one initially used as base for frpo-1metascan scanning process
+- Recovery dir: destination to host recovered source content, having same
+hierarchy and holding partial/fully recovered files
+- One or more metadata lists that internally instructs which files to recover (relative
+path) and the priority implicitly by the mere line order
 
 ``frpo-4purge`` is commonly useful to run after a fruitful frpo-3sync execution,
 as it scans the recovery dir, matches the result with each passed list and when
 needed moves out the fully recovered entries in a new *.done* list.
 Now for each list we have an updated one shortened by removal of full recovered
-entries and a new one accounting all these stripped entries.\
+entries and a new one storing all these stripped entries.\
 Takes 2 or more arguments, 1st is the recovery dir, from 2nd can be passed any
 metadata lists to be stripped.
 
+##### Example
 
+Let's build from scratch an example for a FRPO application, taking an
+hypothetical defective HDD coming from a Windows machine, let's mount read-only
+the partition where we have the data to recover:\
+```
+$ sudo mkdir /mnt/prefail
+$ sudo mount /dev/sdz1 /mnt/prefail -o ro,uid=1000,fmask=117,dmask=7,noatime
+```
+We know that the files to recover are under the ``user`` dir, checking first in
+the ``Users`` dir to be sure that there no other users other than "user"
+```
+$ cd /mnt/prefail/Users
+$ ls -la
+drwxrwx--- 1 sandro root  4096  4 set  2020  .
+drwxrwx--- 1 sandro root 12288  5 set  2020  ..
+lrwxrwxrwx 2 sandro root    19 14 lug  2009 'All Users' -> /mnt/prefail/ProgramData
+drwxrwx--- 1 sandro root  8192  4 set  2020  Default
+lrwxrwxrwx 2 sandro root    21 14 lug  2009 'Default User' -> /mnt/prefail/Users/Default
+-rw-rw---- 1 sandro root   174 14 lug  2009  desktop.ini
+drwxrwx--- 1 sandro root  4096 12 apr  2011  Public
+drwxrwx--- 1 sandro root  8192  4 set  2020  user
 
+$ cd user
+$ ls -la
+drwxrwx--- 1 sandro root   8192  4 set  2020  .
+drwxrwx--- 1 sandro root   4096  4 set  2020  ..
+drwxrwx--- 1 sandro root      0  4 set  2020  AppData
+drwxrwx--- 1 sandro root      0  4 set  2020  Contacts
+drwxrwx--- 1 sandro root      0  4 set  2020  Desktop
+drwxrwx--- 1 sandro root      0  4 set  2020  Documents
+drwxrwx--- 1 sandro root      0  4 set  2020  Downloads
+drwxrwx--- 1 sandro root   4096  4 set  2020  Favorites
+drwxrwx--- 1 sandro root      0  4 set  2020  Links
+drwxrwx--- 1 sandro root      0  4 set  2020  Music
+-rw-rw---- 1 sandro root 786432  5 set  2020  NTUSER.DAT
+-rw-rw---- 1 sandro root     20  4 set  2020  ntuser.ini
+drwxrwx--- 1 sandro root      0  4 set  2020  Pictures
+drwxrwx--- 1 sandro root      0  4 set  2020 'Saved Games'
+drwxrwx--- 1 sandro root      0  4 set  2020  Searches
+drwxrwx--- 1 sandro root      0  4 set  2020  Videos
+```
+We know typical user stuff gets stored into there dirs:
+``Desktop``, ``Documents``, ``Pictures``, ``Music``, ``Videos`` and
+``Downloads``
+We can surf inside to do a more refined view and know better what exactly pick
+and what not, but to do something substantial we should use for ex. a space
+utilization query command (``du -sh``) among some dirs and this would be way too
+demanding and dangerous for a disk in prefailure.\
+Anyway the FRPO scripts are made to follow a fair file-type level priority
+principle so let's start the 1st metadata scan:
 
+``$ frpo-1metascan Desktop Documents Pictures Music Videos Downloads >
+/safe/recovery/main.ls``
 
+After minutes of clicking noise and hiccups coming from the HDD finally we have
+our main file list inside the main recovery dir ``/safe/recovery``, now by
+running this script command line we can also have a sort of summary of the
+composition of files to recover
+```
+$ cd /safe/recovery
+$ frpo-2extats main.ls
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Count   Disk space  Extension
+-----   ----------  ---------
+  245  59700032760  mp4
+    1  15386326212  mov
+   12  14986062726  avi
+ 1514   9574957675  mp3
+    4   7060105192  mkv
+ 6255   6408956127  jpg
+ 5722   2312081416  pdf
+    1    932648071  3gp
+  137    481149637  m4a
+  990    224908911  docx
+   50    220995862  zip
+ 2887    210022469  doc
+   43    172978690  wma
+   71    162895691  pptx
+   46    147119616  ppt
+    4    107666340  rar
+   61     89651200  pps
+  655     87096884  xls
+   89     54477463  (no extension)
+  776     49848562  jpeg
+  153     38343050  png
+  714     37419983  kar
+   11     25240986  exe
+   23     24674451  p7m
+   40     22841590  eml
+   44     19462336  mht
+  488     17180231  xlsx
+  292     15880912  mid
+   67      8449128  rtf
+   10      6725632  accdb
+   15      2858897  html
+   62       862729  js
+    1       755200  pub
+   19       343295  xml
+    3       234811  midi
+    1       192512  mdb
+   11       160932  odt
+    2        33297  ods
+    6         5043  txt
+```
 
 
 
