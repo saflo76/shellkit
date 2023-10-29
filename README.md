@@ -299,7 +299,7 @@ Given that we can start a first run of the recovery with the command line:
 $ mkdir data
 $ frpo-3sync /mnt/prefail /safe/recovery/data [1-3]*.ls
 ```
-But why only these? The first run is also important to probe (for user
+But why just these? The first run is also important to probe (for user
 evaluation) to which extent our disk is damaged/responsive, as the recovery
 script will optionally descend into deeper recovery modes (asking stressful
 retries) after the 1st pass of all entries has been tried, so it will be smarter
