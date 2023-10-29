@@ -165,7 +165,7 @@ hypothetical defective HDD coming from a Windows machine, let's mount read-only
 the partition where we have the data to recover:
 ```
 $ sudo mkdir /mnt/prefail
-$ sudo mount /dev/sdz1 /mnt/prefail -o ro,uid=1000,fmask=117,dmask=7,noatime
+$ sudo mount /dev/sdz1 /mnt/prefail -o ro,uid=1000,fmask=117,dmask=7
 ```
 We know that the files to recover are under the ``user`` dir, checking the
 ``Users`` dir to be sure that there are no other ones to include
@@ -306,8 +306,9 @@ retries) after the 1st pass of all entries has been tried, so it will be smarter
 to NOT start by instructing a full recovery job.
 
 If we want avoid deeper modes, for ex. to make the duration less uncertain and
-have a more predictable/limited hardness on disk we can use ``-f`` option like
-in this example, oriented on probing the disk for first time:
+have a more predictable/limited hardness on disk we can use ``-f`` option to
+lock on the recovery mode set at execution (default is mode0, rsync).
+This example is oriented on probing the disk for the first time:
 ```
 $ frpo-3sync -f /mnt/prefail /safe/recovery/data 10documents.ls
 ```
