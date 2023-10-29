@@ -270,6 +270,47 @@ Count   Disk space  Extension
     2        33297  ods
     6         5043  txt
 ```
+At this point the text file ``main.ls`` having a big redundant heap of entries
+inside may suggest us two ways: edit the list directly to examine/strip/reorder
+parts or first find an automated way to split it in smaller sub-lists following
+a category based criterion.\
+This last approach is what helps to do the script ``frpo-2organize``, running it
+with one or more lists as argument produces a splitted output of up to 9
+categories:
+```
+$ frpo-2organize main.ls
+$ ls -1
+
+10documents.ls
+20graphics.ls
+30images.ls
+40archives.ls
+50audio.ls
+60video.ls
+70system.ls
+80diskimg.ls
+90stuff.ls
+```
+With this just simple step we can count that most of times our needed files will
+be concentrated in the first 3 categories.\
+Given that we can start a first run of the recovery with the command line:
+```
+$ mkdir data
+$ frpo-3sync /mnt/prefail /safe/recovery/data [1-3]*.ls
+```
+But why only these? The first run is also important to probe (for user
+evaluation) to which extent our disk is damaged/responsive, as the recovery
+script will optionally descend into deeper recovery modes (asking stressful
+retries) after the 1st pass of all entries has been tried, so it will be smarter
+to NOT start by instructing a full recovery job.\
+
+If we want avoid deeper modes, for ex. to make the duration less uncertain and
+have a more predictable/limited hardness on disk we can use ``-f`` option like
+in this example, oriented on probing the disk for first time:
+```
+$ frpo-3sync -f /mnt/prefail /safe/recovery/data 10documents.ls
+```
+
 
 
 
