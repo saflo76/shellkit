@@ -279,7 +279,7 @@ with one or more lists as argument produces a splitted output of up to 9
 categories:
 ```
 $ frpo-2organize main.ls
-$ ls -1
+$ ls -1 *.ls
 
 10documents.ls
 20graphics.ls
@@ -290,6 +290,7 @@ $ ls -1
 70system.ls
 80diskimg.ls
 90stuff.ls
+main.ls
 ```
 With this just simple step we can count that most of times our needed files will
 be concentrated in the first 3 categories.\
@@ -302,7 +303,7 @@ But why only these? The first run is also important to probe (for user
 evaluation) to which extent our disk is damaged/responsive, as the recovery
 script will optionally descend into deeper recovery modes (asking stressful
 retries) after the 1st pass of all entries has been tried, so it will be smarter
-to NOT start by instructing a full recovery job.\
+to NOT start by instructing a full recovery job.
 
 If we want avoid deeper modes, for ex. to make the duration less uncertain and
 have a more predictable/limited hardness on disk we can use ``-f`` option like
