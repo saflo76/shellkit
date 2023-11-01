@@ -150,11 +150,12 @@ hierarchy and holding partial/fully recovered files
 - One or more metadata lists that internally instructs which files to recover
 (relative path) and the priority implicitly by the mere line order
 
-``frpo-4purge`` is commonly useful to run after a fruitful ``frpo-3sync``
-execution, as it scans the recovery dir, matches the result with each passed
-list and when needed moves out the fully recovered entries in a new ``.done``
-list. Now for each list we have an updated one shortened by removal of full
-recovered entries and a new one storing all these stripped entries.\
+``frpo-4purge`` is commonly useful after a fruitful ``frpo-3sync`` run, as it
+scans the recovery dir, matches the result with each passed list and when needed
+strips out the fully recovered entries appending them to a ``.done`` respective
+list. This list entries update is not integrated in ``frpo-3sync`` process as
+this one is prone to be often interrupted by user or other circumstances (for
+ex. failing disk gets stuck and needs to be turned off and reconnected).\
 Takes 2 or more arguments, 1st is the recovery dir, from 2nd can be passed any
 metadata lists to be stripped.
 
@@ -274,8 +275,8 @@ At this point the text file ``main.ls`` having a big redundant heap of entries
 inside may suggest us two ways: edit the list directly to examine/strip/reorder
 parts or first find an automated way to split it in smaller sub-lists following
 a category based criterion.\
-This last approach is what helps to do the script ``frpo-2organize``, running it
-with one or more lists as argument produces a splitted output of up to 9
+The latter approach is what helps to do the script ``frpo-2organize``, running
+it with one or more lists as argument produces a splitted output of up to 9
 categories:
 ```
 $ frpo-2organize main.ls
@@ -305,13 +306,50 @@ script will optionally descend into deeper recovery modes (asking stressful
 retries) after the 1st pass of all entries has been tried, so it will be smarter
 to NOT start by instructing a full recovery job.
 
-If we want avoid deeper modes, for ex. to make the duration less uncertain and
-have a more predictable/limited hardness on disk we can use ``-f`` option to
-lock on the recovery mode set at execution (default is mode0, rsync).
+If we want to avoid deeper modes, for ex. to make the duration less uncertain
+and avoid overloading the disk by requests into damaged areas we can use ``-f``
+option to fix operation on a single pass, the default set at run (mode0/rsync)
+or set by option.\
 This example is oriented on probing the disk for the first time:
 ```
 $ frpo-3sync -f /mnt/prefail /safe/recovery/data 10documents.ls
 ```
+After a recovery pass has been finished or partially run, using ``frpo-4purge``
+any passed list as argument can be checked for fully recovered files and the
+completed entries stripped and appended in a respective ``.done`` list.
+```
+$ frpo-4purge [1-3]*.ls
+$ ls -1 [1-3]*
+
+10documents.ls
+10documents.done
+20graphics.ls
+30images.ls
+```
+In this example inside ``10documents.ls`` have been detected some fully
+recovered entries, now stripped and appended in its ``.done`` counterpart.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
