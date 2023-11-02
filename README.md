@@ -336,7 +336,7 @@ between two hosts using a SSH session, since ``ssh`` usually offers some
 alternative ciphers to the default one, ``sk-ssh-ciperf`` automates a benchmark
 for each one reporting the rate results. Each cipher test is done by first
 logging the remote host into ssh's master mode (to exclude handshake lag from
-timing) and then detecting the time to send or receive a data buffer.\
+timing) and then timing the effort to send or receive a data buffer.\
 Example of probing a host in a gigabit LAN network:
 ```
 $ sk-ssh-ciperf user@192.168.1.100
