@@ -357,7 +357,7 @@ Using 32 MiB sample buffer from '/dev/zero'
 ```
 Results obviously depend by a compromise of external connection bandwidth and
 single hosts efficiency cipher-wise, that said being curious about single host
-performance this can be tested by a loopback connection:
+performance this can be obtained with a loopback connection:
 ```
 $ sk-ssh-ciperf 127.0.0.1
 ```
