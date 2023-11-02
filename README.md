@@ -329,11 +329,38 @@ $ ls -1 [1-3]*
 In this example inside ``10documents.ls`` have been detected some fully
 recovered entries, now stripped and appended in its ``.done`` counterpart.
 
+### sk-ssh-ciperf
 
+This is a tool for testing the maximum (up/down)load transfer rate reachable
+between two hosts using a SSH session, since ``ssh`` usually offers some
+alternative ciphers to the default one, ``sk-ssh-ciperf`` automates a benchmark
+for each one reporting the rate results. Each cipher test is done by first
+logging the remote host into ssh's master mode (to exclude handshake lag from
+timing) and then detecting the time to send or receive a data buffer.\
+Example of probing a host in a gigabit LAN network:
+```
+$ sk-ssh-ciperf user@192.168.1.100
 
-
-
-
+Upload test
+Connection... Ok
+Using 32 MiB sample buffer from '/dev/zero'
+(unsupported)  3des-cbc
+(unsupported)  aes128-cbc
+(unsupported)  aes192-cbc
+(unsupported)  aes256-cbc
+93.57 MiB/s  aes128-ctr
+83.06 MiB/s  aes192-ctr
+82.96 MiB/s  aes256-ctr
+85.90 MiB/s  aes128-gcm@openssh.com
+90.86 MiB/s  aes256-gcm@openssh.com
+79.17 MiB/s  chacha20-poly1305@openssh.com
+```
+Results obviously depend by a compromise of external connection bandwidth and
+single hosts efficiency cipher-wise, that said being curious about single host
+performance this can be tested by a loopback connection:
+```
+$ sk-ssh-ciperf 127.0.0.1
+```
 
 
 
