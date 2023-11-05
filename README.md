@@ -410,7 +410,7 @@ wiping out almost everything!), so in this example it keeps everything within 5
 days from then, sending to the output the lines from Jan 1st to
 9th as suitable to discard.
 
-``sk-prune-dates`` offers 4 filtering modes, from trivial to smarter one:
+``sk-prune-dates`` offers 4 filtering methods, from trivial to smarter one:
 - **Time window**:\
 Any date within time window **T** is kept.
 - **Dates count**:\
@@ -418,14 +418,35 @@ Any date within last **N** is kept.
 - **Dates count** in a **time window** with a **linear layout**:\
 Time window **T** is divided into **N**-1 even zones, oldest date of each zone
 is kept, latest date is always kept.\
-(roughly: The **N** dates covering at most time window **T** with the most even
+(roughly: the **N** dates covering at most time window **T** with the most even
 distance are kept)
 - **Dates count** in a **time window** with an **exponential layout**:\
 Time window **T** is divided into **N**-1 exponentially growing zones
 (backwards in time, with exponent **E**), oldest date of each zone is kept,
 latest date is always kept.
 
+An example using 4th method, keeping 4 dates in a 15 days time window with 3 as
+exponent for progression:
+```
+$ time=$(sk-time-to-sec 15d) keep=4 exp=3 sk-prune-dates < snapshots
 
+snapshot-20230103-1259
+snapshot-20230105-1740
+snapshot-20230107-0030
+snapshot-20230111-1130
+```
+To better understand and know ahead of time the pruning zones applied by any
+setup the tool ``sk-prune-dates-tuner`` visually shows them, this example shows
+the values used by previous one:
+```
+$ sk-prune-dates-tuner -n4 -t15d -E3
+
+Pruning constraints (oldest to latest):
+n° 4	15d	||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+n° 3	6d 7h	|||||||||||||||||||||||||||||||||||
+n° 2	1d 21h	||||||||||
+n° 1    0 (now)
+```
 
 
 
