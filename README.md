@@ -437,14 +437,14 @@ snapshot-20230111-1130
 ```
 To better understand and know ahead of time the pruning zones applied by any
 setup the tool ``sk-prune-dates-tuner`` visually shows them, this example shows
-the values used by previous one:
+the values used by previous execution:
 ```
 $ sk-prune-dates-tuner -n4 -t15d -E3
 
 Pruning constraints (oldest to latest):
-n° 4	15d	||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-n° 3	6d 7h	|||||||||||||||||||||||||||||||||||
-n° 2	1d 21h	||||||||||
+n° 4	15d	||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+n° 3	6d 7h	||||||||||||||||||||||||||||||||
+n° 2	1d 21h	|||||||||
 n° 1    0 (now)
 ```
 
