@@ -362,9 +362,68 @@ performance this can be obtained with a loopback connection:
 $ sk-ssh-ciperf 127.0.0.1
 ```
 
+### sk-time-to-sec
 
+Useful to convert <NUM>*ymwdhM*[...] human readable time expressions into one
+cumulative number in seconds, it's used by some scripts.\
+Example of sum in seconds of 1 year, 4 months, 2 weeks and 3 hours:
+```
+$ sk-time-to-sec 1y4m2w3h
 
+43297200
+```
 
+### sk-prune-dates
+
+This is one of scripts that I find many times convenient, briefly it's an easy
+date-wise pruning filter for any date tagged list provided as input, the output
+is a subset of the input lines meant as suitable to be pruned (deleted).\
+It doesn't have any arguments parsing (as the usual way), it works by
+stdin/stdout and takes parameters as direct variable assignment. It's conceived
+in such backend form as it's meant to be called mainly inside other scripts so
+any argument parsing would have been a futile bloat.
+Let's consider the following list inside the temporary file named ``snapshots``
+```
+snapshot-20230101-0915
+snapshot-20230103-1259
+snapshot-20230105-1740
+snapshot-20230107-0030
+snapshot-20230109-2359
+snapshot-20230111-1130
+snapshot-20230113-1905
+snapshot-20230115-0710
+```
+Let's filter by last 5 days time window
+```
+$ time=$(sk-time-to-sec 5d) sk-prune-dates < snapshots
+
+snapshot-20230101-0915
+snapshot-20230103-1259
+snapshot-20230105-1740
+snapshot-20230107-0030
+snapshot-20230109-2359
+```
+Script doesn't care about today's date, it's the reference date acting as
+"today", i.e. the most recent of the lot (this takes sense at the moment of
+final application as you can prune a group of old snapshots without the risk of
+wiping out almost everything!), so in this example it keeps everything within 5
+days from then, sending to the output the lines from Jan 1st to
+9th as suitable to discard.
+
+``sk-prune-dates`` offers 4 filtering modes, from trivial to smarter one:
+- **Time window**:\
+Any date within time window **T** is kept.
+- **Dates count**:\
+Any date within last **N** is kept.
+- **Dates count** in a **time window** with a **linear layout**:\
+Time window **T** is divided into **N**-1 even zones, oldest date of each zone
+is kept, latest date is always kept.\
+(roughly: The **N** dates covering at most time window **T** with the most even
+distance are kept)
+- **Dates count** in a **time window** with an **exponential layout**:\
+Time window **T** is divided into **N**-1 exponentially growing zones
+(backwards in time, with exponent **E**), oldest date of each zone is kept,
+latest date is always kept.
 
 
 

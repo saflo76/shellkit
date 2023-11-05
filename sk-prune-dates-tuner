@@ -40,7 +40,7 @@ declare -i linear=$((exp==1)) snap i j year=31557600 month=2629800 day=86400 hou
 let time*=1000000
 split=$((time/(keep-linear)**exp+1))
 
-echo "Pruning constraints (older to latter):"
+echo "Pruning constraints (oldest to latest):"
 while (( keep > 1 )); do
     snap=$((split*(keep-linear)**exp))/1000000
     bar=snap/block

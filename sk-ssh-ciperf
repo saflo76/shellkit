@@ -49,7 +49,7 @@ d=(Up Down)
 echo "${d[$download]}load test"
 
 echo -n 'Connection... '
-# Assign base SSH command line and test remote host reachabiity
+# Assign base SSH command line and test remote host reachability
 ssh="ssh -q${port+p$port} -S /dev/shm/%C $1"
 $ssh -Mo ControlPersist=2 echo Ok || exit 1
 
