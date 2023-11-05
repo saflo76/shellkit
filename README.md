@@ -361,6 +361,7 @@ performance this can be obtained with a loopback connection:
 ```
 $ sk-ssh-ciperf 127.0.0.1
 ```
+
 ### sk-time-to-sec
 
 Useful to convert <NUM>*ymwdhM*[...] human readable time expressions into one
@@ -371,6 +372,7 @@ $ sk-time-to-sec 1y4m2w3h
 
 43297200
 ```
+
 ### sk-prune-dates
 
 This is one of scripts that I find many times convenient, briefly it's an easy
@@ -416,8 +418,8 @@ Any date within last **N** is kept.
 - **Dates count** in a **time window** with a **linear layout**:\
 Time window **T** is divided into **N**-1 even zones, oldest date of each zone
 is kept, latest date is always kept.\
-(roughly: the **N** dates covering at most time window **T** with the most even
-distance are kept)
+(roughly: keeping the **N** dates covering at most time window **T** with the
+most even spacing)
 - **Dates count** in a **time window** with an **exponential layout**:\
 Time window **T** is divided into **N**-1 exponentially growing zones
 (backwards in time, with exponent **E**), oldest date of each zone is kept,
