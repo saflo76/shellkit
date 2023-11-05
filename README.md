@@ -361,7 +361,6 @@ performance this can be obtained with a loopback connection:
 ```
 $ sk-ssh-ciperf 127.0.0.1
 ```
-
 ### sk-time-to-sec
 
 Useful to convert <NUM>*ymwdhM*[...] human readable time expressions into one
@@ -372,7 +371,6 @@ $ sk-time-to-sec 1y4m2w3h
 
 43297200
 ```
-
 ### sk-prune-dates
 
 This is one of scripts that I find many times convenient, briefly it's an easy
