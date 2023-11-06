@@ -498,7 +498,7 @@ ATM ``sk-prune-dates`` is used by the scripts ``sk-btrfs-snap``,
 ``sk-btrfs-snap`` is a pratical script to create, prune and maintain date tagged
 BTRFS file system's snapshots, being as implicit as possible for handy usage.
 The simplest execution, specifying just subvolumes, creates the respective date
-tagged snapshot for each one.
+tagged snapshot for each of them.
 ```
 [/v1/local] $ sudo sk-btrfs-snap @root @home
 
