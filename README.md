@@ -411,18 +411,18 @@ days from then, sending to the output the lines from Jan 1st to
 9th as suitable to discard.
 
 ``sk-prune-dates`` offers 4 filtering methods, from trivial to smarter one:
-- **Time window** (-t <T>):\
+- **Time window** (time=**T**):\
 Any date within time window **T** is kept.
-- **Dates count** (-n <N>):\
+- **Dates count** (keep=**N**):\
 Any date within last **N** is kept.
-- **Dates count** in a **time window** with a **linear layout** (-n <N> -t <T>
--E 1):\
+- **Dates count** in a **time window** with a **linear layout** (keep=**N**
+time=**T** exp=**1**):\
 Time window **T** is divided into **N**-1 even zones, oldest date of each zone
 is kept, latest date is always kept.\
 (roughly: keeping the **N** dates covering at most time window **T** with the
 most even spacing)
-- **Dates count** in a **time window** with an **exponential layout** (-n <N> -t <T>
--E <2+>):\
+- **Dates count** in a **time window** with an **exponential layout**
+(keep=**N** time=**T** exp=**E > 1**):\
 Time window **T** is divided into **N**-1 exponentially growing zones
 (backwards in time, with exponent **E**), oldest date of each zone is kept,
 latest date is always kept.
