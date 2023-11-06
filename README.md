@@ -411,16 +411,18 @@ days from then, sending to the output the lines from Jan 1st to
 9th as suitable to discard.
 
 ``sk-prune-dates`` offers 4 filtering methods, from trivial to smarter one:
-- **Time window**:\
+- **Time window** (-t <T>):\
 Any date within time window **T** is kept.
-- **Dates count**:\
+- **Dates count** (-n <N>):\
 Any date within last **N** is kept.
-- **Dates count** in a **time window** with a **linear layout**:\
+- **Dates count** in a **time window** with a **linear layout** (-n <N> -t <T>
+-E 1):\
 Time window **T** is divided into **N**-1 even zones, oldest date of each zone
 is kept, latest date is always kept.\
 (roughly: keeping the **N** dates covering at most time window **T** with the
 most even spacing)
-- **Dates count** in a **time window** with an **exponential layout**:\
+- **Dates count** in a **time window** with an **exponential layout** (-n <N> -t <T>
+-E <2+>):\
 Time window **T** is divided into **N**-1 exponentially growing zones
 (backwards in time, with exponent **E**), oldest date of each zone is kept,
 latest date is always kept.
@@ -491,7 +493,16 @@ settings, actually producing lot of wasted space.\
 ATM ``sk-prune-dates`` is used by the scripts ``sk-btrfs-snap``,
 ``sk-btrfs-send`` and ``sk-borg-prune``
 
-##### ``sk-btrfs-snap``
+### sk-btrfs-snap
+
+``sk-btrfs-snap`` is a pratical script to create and prune BTRFS file system's
+snapshots
+
+
+
+
+
+
 
 
 
