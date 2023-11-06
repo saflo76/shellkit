@@ -487,8 +487,11 @@ Exponential layout avoids the typical aliasing/inconsistency of the historical
 GFS (Grandfather Father Son) retention policy, suffering by those sharp jumps in
 distribution between hours/day, days/week, weeks/month and months/year zones.
 This bad (uneven) nature of GFS also pushes the user to compensate by rising
-settings, actually producing lot of wasted space.
+settings, actually producing lot of wasted space.\
+ATM ``sk-prune-dates`` is used by the scripts ``sk-btrfs-snap``,
+``sk-btrfs-send`` and ``sk-borg-prune``
 
+### ``sk-btrfs-snap``
 
 
 
