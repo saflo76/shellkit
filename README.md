@@ -491,7 +491,7 @@ settings, actually producing lot of wasted space.\
 ATM ``sk-prune-dates`` is used by the scripts ``sk-btrfs-snap``,
 ``sk-btrfs-send`` and ``sk-borg-prune``
 
-### ``sk-btrfs-snap``
+#### ``sk-btrfs-snap``
 
 
 
