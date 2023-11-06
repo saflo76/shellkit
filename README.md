@@ -411,7 +411,7 @@ days from then, sending to the output the lines from Jan 1st to
 9th as suitable to discard.
 
 ``sk-prune-dates`` offers 4 filtering methods, from trivial to smarter one:
-- **Time window** (time=**T**):\
+- **Time window** (``time=**T**``):\
 Any date within time window **T** is kept.
 - **Dates count** (keep=**N**):\
 Any date within last **N** is kept.
