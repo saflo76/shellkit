@@ -497,18 +497,24 @@ ATM ``sk-prune-dates`` is used by the scripts ``sk-btrfs-snap``,
 
 ``sk-btrfs-snap`` is a pratical script to create, prune and maintain date tagged
 BTRFS file system's snapshots, being as implicit as possible for handy usage.
-The simplest execution, specifying just subvolumes, creates a date tagged
-snapshot for each one.\
+The simplest execution, specifying just subvolumes, creates the respective date
+tagged snapshot for each one.
 ```
-/v1/local $ sudo sk-btrfs-snap @root @home
+[/v1/local] $ sudo sk-btrfs-snap @root @home
 
 Create a readonly snapshot of '@root' in '/v1/local/@root-20230131-2359'
 Create a readonly snapshot of '@home' in '/v1/local/@home-20230131-2359'
 ```
-Using one of the retention pattern options ``-n`` or ``-t`` adds also a pruning
-action after, whereas ``-P`` instructs pruning without creation.
+Using one of the retention pattern options ``-n`` or ``-t`` activates pruning
+afterwards, whereas ``-P`` avoids creation at all to do just pruning.
 
-
+Example keeping a 6 months 10 snapshot smart maintainance cycle by just running
+a brief self-contained one-liner, ready to be repeated anytime/anyplace would be
+useful:\
+(``-E3`` is implied by default)
+```
+$ sk-btrfs-snap -n10 -t6m @root @home @data
+```
 
 
 
