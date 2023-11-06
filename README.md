@@ -500,7 +500,8 @@ BTRFS file system's snapshots, being as implicit as possible for handy usage.
 The simplest execution, specifying just subvolumes, creates a date tagged
 snapshot for each one.\
 ```
-[/v1/local] $ sudo sk-btrfs-snap @root @home
+[/v1/local] sudo sk-btrfs-snap @root @home
+
 Create a readonly snapshot of '@root' in '/v1/local/@root-20230131-2359'
 Create a readonly snapshot of '@home' in '/v1/local/@home-20230131-2359'
 ```
