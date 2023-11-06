@@ -430,7 +430,7 @@ latest date is always kept.
 An example using 4th method, keeping 4 dates in a 15 days time window with 3 as
 exponent for progression:
 ```
-$ time=$(sk-time-to-sec 15d) keep=4 exp=3 sk-prune-dates < snapshots
+$ keep=4 time=$(sk-time-to-sec 15d) exp=3 sk-prune-dates < snapshots
 
 snapshot-20230103-1259
 snapshot-20230105-1740
@@ -495,8 +495,17 @@ ATM ``sk-prune-dates`` is used by the scripts ``sk-btrfs-snap``,
 
 ### sk-btrfs-snap
 
-``sk-btrfs-snap`` is a pratical script to create and prune BTRFS file system's
-snapshots
+``sk-btrfs-snap`` is a pratical script to create, prune and maintain date tagged
+BTRFS file system's snapshots, being as implicit as possible for handy usage.
+The simplest execution, specifying just subvolumes, creates a date tagged
+snapshot for each one.\
+```
+[/v1/local] $ sudo sk-btrfs-snap @root @home
+Create a readonly snapshot of '@root' in '/v1/local/@root-20230131-2359'
+Create a readonly snapshot of '@home' in '/v1/local/@home-20230131-2359'
+```
+Using one of the retention pattern options ``-n`` or ``-t`` adds also a pruning
+action after, whereas ``-P`` instructs pruning without creation.
 
 
 
