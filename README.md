@@ -422,9 +422,9 @@ is kept, latest date is always kept.\
 (roughly: keeping the **N** dates covering at most time window **T** with the
 most even spacing)
 - **Dates count** in a **time window** with an **exponential layout**
-(``keep=N time=T exp=E>1``):\
+(``keep=N time=T exp=E``):\
 Time window **T** is divided into **N**-1 exponentially growing zones
-(backwards in time, with exponent **E**), oldest date of each zone is kept,
+(backwards in time, with exponent **E** > 1), oldest date of each zone is kept,
 latest date is always kept.
 
 An example using 4th method, keeping 4 dates in a 15 days time window with 3 as
