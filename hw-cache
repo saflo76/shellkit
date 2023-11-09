@@ -1,14 +1,18 @@
 #!/bin/bash
 
+# hashworks
+# Cache and hash backed file system Scan, Hash, Dedup, Diff and Sync tools
+
+# hw-cache   hash cache management front/backend: build, update and query
+# hw-dedup   file deduplicator: report and purge
+# hw-diff    text/binary file diffing wrapper
+# hw-sync    local and remote interactive/unattended file system synchronizer
+
 help () {
 cat >&2 <<EOF
-hashworks -- Written by Sandro Floridia
-Cache and hash backed file system Scan, Hash, Dedup, Diff and Sync tools
-
-hw-cache   hash cache management front/backend: build, update and query
-hw-dedup   file deduplicator: report and purge
-hw-diff    text/binary file diffing wrapper
-hw-sync    local and remote interactive/unattended file system synchronizer
+$cmd_name -- File hashsum cache management tool			 191201 Started
+Build, update and query	front/backend				 220523 Improved
+				    written by Sandro Floridia	 231109 Updated
 
 Syntax:  $cmd_name [-switches] [FILE|DIR[LIST]] [...] [-switches] [...]
 
@@ -55,7 +59,7 @@ mutex_cat () {
     exec {lock}>&-
 }
 log_msg () {
-    local e=$?	# Hold current error status and print a message to stderr
+    local e=$? # Hold current error status and print a message to stderr
     echo $(date +%Y%m%d-%H%M.%S)" -- $cmd_name ($e) $@" >&2
     return $e
 }
@@ -234,11 +238,14 @@ find_symlpoint () {
     # Routine accepts real symlinks candidates, avoid '/' or 'sed 's:/$::'' will empty the string!
     # Sed here cuts trailing '/' for correct symlink detection by 'find' command
     sed 's:/$::' | \
-        xargs -rd\\n bash -c 'find "$@" -maxdepth 0 -type l -xtype d -printf %l/\\t%p/\\n' '' | \
-        sed s://:/: > $t.pairs
-    [[ -s $t.pairs ]] && {
+        xargs -rd\\n bash -c 'find "$@" -maxdepth 0 -type l -xtype d -printf %p/\\n' '' > $t.symld
+    [[ -s $t.symld ]] && {
+        # Make a tab by pairing real path and source symlink dir
+        xargs -rd\\n -a $t.symld realpath -m -- | sed 's:[^/]$:&/:' | paste - $t.symld > $t.pairs
+        # Extract a match of fstab inside real paths
         grep -of fstab_filter $t.pairs > $t.mounts
         cut -f2 $t.pairs | paste $t.mounts - | fstab_sort -o $t.tmp
+        # Build the fstab supplement for correct symlink dirs device matching
         join --nocheck-order -t$'\t' -o 1.2,2.2,2.3 $t.tmp fstab | fstab_sort
     }
     rm -- $t.*
