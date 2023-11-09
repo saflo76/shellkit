@@ -34,7 +34,7 @@ while [[ $1 = -* ]]; do
             buf_size=$2; shift ;;
         d|download) download=1 ;;
         f|file=) buf=$2; shift ;;
-        # Get ciphers arranged in array by changing first the separator
+        # Get ciphers arranged in an array by replacing the separator first
         c|ciphers=) ciphers=(${2//,/ }); shift ;;
         h|help) help ;;
         *) echo "Unknown option '$1'"; exit 1 ;;
