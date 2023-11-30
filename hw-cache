@@ -403,11 +403,9 @@ find_symlpoint () {
 # Polish block devices UUIDs lists by deduplication
 for f in *.uuids; do sort -uo $f $f; done
 
-### Highest CPU load block: hashing/matching/updating file lists
 
-process_list () {
-    local -i i whole_dir
-    
+# Get available DBs list and setup access vars
+setup_db () {
     # Get available database list and convert from label friendly format to real path usable format
     cd "$cache_dir"
     dbs=(db_$uuid*)
@@ -417,12 +415,7 @@ process_list () {
     # From the database list will be generated a multiple regex pattern for directories selection
     sed "$path_filter" dbs > dbs_BRE
     
-    (( verbose )) && [[ $op_mode = [su] ]] && {
-        unset a; i=$(wc -l < found)
-        (( serial )) || a="${bdev:4}  "
-        echo "$a$i(f)  ${dir:0:-1}"
-    }
-    unset parent_db db_i
+    unset parent_db
     # Find the closest backing database: parent or direct if exist
     # grep -of does a great job here printing the longest and closest match to dir
     backing_dir=("$(grep -of dbs_BRE <<< "$dir")")
@@ -433,6 +426,19 @@ process_list () {
     }
     work_db_n="db_$uuid${dir////$slash}"
     work_db=$cache_dir/$work_db_n
+}
+
+
+### Highest CPU load block: hashing/matching/updating file lists
+process_list () {
+    local -i i db_i whole_dir
+    
+    (( verbose )) && [[ $op_mode = [su] ]] && {
+        unset a; i=$(wc -l < found)
+        (( serial )) || a="${bdev:4}  "
+        echo "$a$i(f)  ${dir:0:-1}"
+    }
+    setup_db
 
     # '--scan' mode when combined with directory always drops old data rehashing everything
     [[ $op_mode = s ]] && (( whole_dir )) || {
@@ -561,28 +567,9 @@ process_list () {
 
 
 query_list () {
-    local -i i whole_dir
-    
-    # Get available database list and convert from label friendly format to real path usable format
-    cd "$cache_dir"
-    dbs=(db_$uuid*)
-    cd $tmp/$fs
-    { (( ${#dbs[@]} )) && sed "s,^[^$slash]\+,,; s,$slash,/,g" <<< "${dbs[*]}"; } > dbs
-    
-    # From the database list will be generated a multiple regex pattern for directories selection
-    sed "$path_filter" dbs > dbs_BRE
-    
-    unset parent_db db_i
-    # Find the closest backing database: parent or direct if exist
-    # grep -of does a great job here printing the longest and closest match to dir
-    backing_dir=("$(grep -of dbs_BRE <<< "$dir")")
-    (( ${#backing_dir} && ${#backing_dir} < ${#dir} )) && {
-        # Closest database is a parent (higher path hierarchy), make the path trimming filter string
-        parent_db="$cache_dir/db_$uuid${backing_dir////$slash}"
-        dir_cut="${dir:${#backing_dir}}"
-    }
-    work_db_n="db_$uuid${dir////$slash}"
-    work_db=$cache_dir/$work_db_n
+    local -i i db_i whole_dir
+
+    setup_db
 
     (( ${#backing_dir} )) && {
         let db_i++

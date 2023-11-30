@@ -1,5 +1,8 @@
 #!/bin/bash
 
-args_par=iIoObsmnTDPplurRAavW
+# mbuffer wrapper to set some useful defaults and support adjacent flags (-abc)
+
+args_par=bsmDPpioIOnTlurRaAvW
 . sk-args-expand
-mbuffer -s256k -m256m "$@"
+
+mbuffer -s2m -m512m "$@"
