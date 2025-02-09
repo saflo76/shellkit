@@ -505,8 +505,8 @@ tagged snapshot for each of them.
 Create a readonly snapshot of '@root' in '/v1/local/@root-20230131-2359'
 Create a readonly snapshot of '@home' in '/v1/local/@home-20230131-2359'
 ```
-Using one of the retention pattern options ``-n`` or ``-t`` activates pruning
-afterwards, whereas ``-P`` avoids creation at all to do just pruning.
+Using one of the retention pattern options ``-n`` and/or ``-t`` activates
+pruning afterwards, whereas ``-P`` avoids creation at all to do just pruning.
 
 Example keeping a 6 months 10 snapshot smart maintainance cycle by just running
 a brief self-contained one-liner, ready to be repeated anytime/anyplace would be
